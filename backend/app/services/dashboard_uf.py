@@ -341,23 +341,21 @@ async def _pct_mpe_uf(
     db: AsyncSession,
     uf: str,
 ) -> float:
-    """Calcula o percentual de contratos com MPEs na UF nos ultimos 12 meses."""
+    """Calcula o percentual de contratacoes exclusivas MPE na UF nos ultimos 12 meses."""
     data_inicio = date.today() - timedelta(days=365)
 
     stmt = select(
-        func.count(Contrato.id).label("total"),
+        func.count(Contratacao.id).label("total"),
         func.count(
             case(
-                (Contrato.fornecedor_porte.in_(_PORTES_MPE), Contrato.id),
+                (Contratacao.exclusiva_mpe == True, Contratacao.id),
                 else_=None,
             )
         ).label("total_mpe"),
-    ).join(
-        Contratacao, Contrato.contratacao_id == Contratacao.id
     ).where(
         and_(
             Contratacao.uf == uf,
-            Contrato.data_assinatura >= data_inicio,
+            Contratacao.data_publicacao >= data_inicio,
         )
     )
 

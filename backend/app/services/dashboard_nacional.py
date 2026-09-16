@@ -85,62 +85,56 @@ async def montar_dashboard(
 async def dados_mapa(
     db: AsyncSession,
 ) -> list[dict[str, Any]]:
-    """Dados para mapa coropletico: agregacao por UF de participacao de MPEs.
+    """Dados para mapa coropletico: agregacao por UF de contratacoes.
 
     Retorna todas as 27 UFs, mesmo as sem dados (com zeros).
+    Usa tabela Contratacao diretamente (campo exclusiva_mpe) em vez de Contrato.
     """
-    # Total de contratos por UF
-    stmt_total = (
+    stmt = (
         select(
             Contratacao.uf,
-            func.count(Contrato.id).label("total_contratos"),
-            func.coalesce(func.sum(Contrato.valor_contrato), 0).label("valor_total"),
+            func.count(Contratacao.id).label("total_contratos"),
+            func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
+            func.count(
+                case(
+                    (Contratacao.exclusiva_mpe == True, Contratacao.id),
+                    else_=None,
+                )
+            ).label("total_mpe"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Contratacao.exclusiva_mpe == True, Contratacao.valor_estimado),
+                        else_=None,
+                    )
+                ), 0
+            ).label("valor_mpe"),
         )
-        .join(Contratacao, Contrato.contratacao_id == Contratacao.id)
-        .where(Contratacao.uf.is_not(None))
-        .group_by(Contratacao.uf)
-    )
-
-    # Contratos MPE por UF
-    stmt_mpe = (
-        select(
-            Contratacao.uf,
-            func.count(Contrato.id).label("total_mpe"),
-            func.coalesce(func.sum(Contrato.valor_contrato), 0).label("valor_mpe"),
-        )
-        .join(Contratacao, Contrato.contratacao_id == Contratacao.id)
         .where(
             and_(
                 Contratacao.uf.is_not(None),
-                Contrato.fornecedor_porte.in_(_PORTES_MPE),
+                Contratacao.uf != "",
             )
         )
         .group_by(Contratacao.uf)
     )
 
-    res_total = (await db.execute(stmt_total)).all()
-    res_mpe = (await db.execute(stmt_mpe)).all()
-
-    total_map = {r.uf: r for r in res_total}
-    mpe_map = {r.uf: r for r in res_mpe}
+    result = (await db.execute(stmt)).all()
+    uf_map = {r.uf: r for r in result}
 
     resultado: list[dict[str, Any]] = []
     for uf in _UFS_BRASIL:
-        t = total_map.get(uf)
-        m = mpe_map.get(uf)
-
-        total_contratos = t.total_contratos if t else 0
-        valor_total = float(t.valor_total) if t else 0.0
-        total_mpe = m.total_mpe if m else 0
-        valor_mpe = float(m.valor_mpe) if m else 0.0
-        pct = round((total_mpe / total_contratos) * 100, 1) if total_contratos > 0 else 0.0
+        r = uf_map.get(uf)
+        total = r.total_contratos if r else 0
+        total_mpe = r.total_mpe if r else 0
+        pct = round((total_mpe / total) * 100, 1) if total > 0 else 0.0
 
         resultado.append({
             "uf": uf,
-            "total_contratos": total_contratos,
-            "valor_total": valor_total,
+            "total_contratos": total,
+            "valor_total": float(r.valor_total) if r else 0.0,
             "contratos_mpe": total_mpe,
-            "valor_mpe": valor_mpe,
+            "valor_mpe": float(r.valor_mpe) if r else 0.0,
             "percentual_mpe": pct,
         })
 
@@ -192,62 +186,50 @@ async def tendencias(
     db: AsyncSession,
     periodo_meses: int = 12,
 ) -> list[dict[str, Any]]:
-    """Tendencias mensais nacionais de participacao de MPEs.
+    """Tendencias mensais nacionais de contratacoes.
 
-    Retorna serie temporal com total de contratos, contratos MPE e percentual
-    para cada mes do periodo solicitado.
+    Usa Contratacao.data_publicacao em vez de Contrato.data_assinatura.
     """
     data_inicio = date.today() - timedelta(days=periodo_meses * 30)
 
-    stmt_total = (
+    stmt = (
         select(
-            extract("year", Contrato.data_assinatura).label("ano"),
-            extract("month", Contrato.data_assinatura).label("mes"),
-            func.count(Contrato.id).label("total"),
-            func.coalesce(func.sum(Contrato.valor_contrato), 0).label("valor_total"),
+            extract("year", Contratacao.data_publicacao).label("ano"),
+            extract("month", Contratacao.data_publicacao).label("mes"),
+            func.count(Contratacao.id).label("total"),
+            func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
+            func.count(
+                case(
+                    (Contratacao.exclusiva_mpe == True, Contratacao.id),
+                    else_=None,
+                )
+            ).label("total_mpe"),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Contratacao.exclusiva_mpe == True, Contratacao.valor_estimado),
+                        else_=None,
+                    )
+                ), 0
+            ).label("valor_mpe"),
         )
         .where(
             and_(
-                Contrato.data_assinatura >= data_inicio,
-                Contrato.data_assinatura.is_not(None),
+                Contratacao.data_publicacao >= data_inicio,
+                Contratacao.data_publicacao.is_not(None),
             )
         )
         .group_by("ano", "mes")
         .order_by("ano", "mes")
     )
 
-    stmt_mpe = (
-        select(
-            extract("year", Contrato.data_assinatura).label("ano"),
-            extract("month", Contrato.data_assinatura).label("mes"),
-            func.count(Contrato.id).label("total_mpe"),
-            func.coalesce(func.sum(Contrato.valor_contrato), 0).label("valor_mpe"),
-        )
-        .where(
-            and_(
-                Contrato.data_assinatura >= data_inicio,
-                Contrato.data_assinatura.is_not(None),
-                Contrato.fornecedor_porte.in_(_PORTES_MPE),
-            )
-        )
-        .group_by("ano", "mes")
-        .order_by("ano", "mes")
-    )
-
-    res_total = (await db.execute(stmt_total)).all()
-    res_mpe = (await db.execute(stmt_mpe)).all()
-
-    mpe_lookup: dict[tuple[int, int], Any] = {
-        (int(r.ano), int(r.mes)): r for r in res_mpe
-    }
+    result = (await db.execute(stmt)).all()
 
     serie: list[dict[str, Any]] = []
-    for row in res_total:
+    for row in result:
         ano, mes = int(row.ano), int(row.mes)
         total = row.total
-        m = mpe_lookup.get((ano, mes))
-        total_mpe = m.total_mpe if m else 0
-        valor_mpe = float(m.valor_mpe) if m else 0.0
+        total_mpe = row.total_mpe
         pct = round((total_mpe / total) * 100, 1) if total > 0 else 0.0
 
         serie.append({
@@ -257,7 +239,7 @@ async def tendencias(
             "total_contratos": total,
             "valor_total": float(row.valor_total),
             "contratos_mpe": total_mpe,
-            "valor_mpe": valor_mpe,
+            "valor_mpe": float(row.valor_mpe),
             "percentual_mpe": pct,
         })
 
@@ -273,21 +255,19 @@ async def _pct_mpe_nacional(
     periodo_inicio: date,
     periodo_fim: date,
 ) -> float:
-    """Calcula o percentual nacional de contratos com MPEs."""
+    """Calcula o percentual nacional de contratacoes exclusivas para MPEs."""
     stmt = select(
-        func.count(Contrato.id).label("total"),
+        func.count(Contratacao.id).label("total"),
         func.count(
             case(
-                (Contrato.fornecedor_porte.in_(_PORTES_MPE), Contrato.id),
+                (Contratacao.exclusiva_mpe == True, Contratacao.id),
                 else_=None,
             )
         ).label("total_mpe"),
-    ).join(
-        Contratacao, Contrato.contratacao_id == Contratacao.id
     ).where(
         and_(
-            Contrato.data_assinatura >= periodo_inicio,
-            Contrato.data_assinatura <= periodo_fim,
+            Contratacao.data_publicacao >= periodo_inicio,
+            Contratacao.data_publicacao <= periodo_fim,
         )
     )
 
