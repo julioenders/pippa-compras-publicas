@@ -1,172 +1,181 @@
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import KPICard from '../components/shared/KPICard'
 import CruzamentoScatter from '../components/charts/CruzamentoScatter'
 import { UFS } from '../lib/constants'
+import { api } from '../api/client'
 
-const kpis = [
-  {
-    title: 'Oportunidades',
-    value: '342',
-    trend: 18,
-    subtitle: 'abertas agora',
-    color: '#2ecc71',
-  },
-  {
-    title: 'Valor Total UF',
-    value: 'R$ 180M',
-    trend: 9,
-    subtitle: 'ultimos 12 meses',
-    color: '#0080FF',
-  },
-  {
-    title: 'Desertos UF',
-    value: '12',
-    trend: -4,
-    subtitle: 'municipios sem fornecedor',
-    color: '#e74c3c',
-  },
-  {
-    title: 'Alertas',
-    value: '8',
-    subtitle: 'novas oportunidades hoje',
-    color: '#f39c12',
-  },
-]
+interface UFDash {
+  uf: string
+  oportunidades_abertas: number
+  valor_total_estimado: number
+  desertos_fornecimento: number
+  alertas_nao_lidos: number
+  participacao_mpe_percentual: number
+}
 
-const mockRadar = [
-  { cnae_divisao: '62', cnae_descricao: 'Servicos de TI', demanda: 85, valor_medio: 45000, qtd_mpes: 12, sinal: 'oportunidade' as const },
-  { cnae_divisao: '43', cnae_descricao: 'Construcao', demanda: 42, valor_medio: 120000, qtd_mpes: 8, sinal: 'oportunidade' as const },
-  { cnae_divisao: '10', cnae_descricao: 'Alimenticios', demanda: 67, valor_medio: 22000, qtd_mpes: 35, sinal: 'competitivo' as const },
-  { cnae_divisao: '47', cnae_descricao: 'Comercio varejista', demanda: 95, valor_medio: 18000, qtd_mpes: 60, sinal: 'competitivo' as const },
-  { cnae_divisao: '26', cnae_descricao: 'Equip. informatica', demanda: 15, valor_medio: 85000, qtd_mpes: 2, sinal: 'deserto' as const },
-  { cnae_divisao: '33', cnae_descricao: 'Manutencao', demanda: 28, valor_medio: 55000, qtd_mpes: 3, sinal: 'cautela' as const },
-]
+interface RadarItem {
+  id: number
+  orgao: string
+  objeto: string
+  valor_estimado: number
+  exclusiva_mpe: boolean
+  data_encerramento: string | null
+  modalidade: string
+  sinal: string
+  sinal_descricao: string
+  score: number
+  cnae_divisao: string
+  cnae_descricao: string
+  qtd_mpes_regiao: number
+}
+
+interface CruzamentoItem {
+  cnae_divisao: string
+  cnae_descricao: string
+  qtd_contratacoes: number
+  valor_total_demanda: number
+  qtd_mpes_regiao: number
+  sinal: string
+  sinal_descricao: string
+}
 
 const SINAL_COLORS: Record<string, string> = {
-  oportunidade: '#2ecc71',
-  competitivo: '#f39c12',
-  cautela: '#e67e22',
-  saturado: '#e74c3c',
-  deserto: '#95a5a6',
+  oportunidade: 'bg-green-500',
+  competitivo: 'bg-yellow-500',
+  cautela: 'bg-orange-500',
+  saturado: 'bg-red-500',
+  deserto: 'bg-gray-500',
 }
 
 const SINAL_LABELS: Record<string, string> = {
   oportunidade: 'Oportunidade',
   competitivo: 'Competitivo',
-  cautela: 'Atencao',
+  cautela: 'Cautela',
   saturado: 'Saturado',
   deserto: 'Deserto',
 }
 
-const mockScatter = mockRadar.map((r) => ({
-  cnae_divisao: r.cnae_divisao,
-  cnae_descricao: r.cnae_descricao,
-  qtd_contratacoes: r.demanda,
-  qtd_mpes_regiao: r.qtd_mpes,
-  sinal: r.sinal,
-}))
+function fmtVal(v: number) {
+  if (v >= 1e9) return `R$ ${(v / 1e9).toFixed(1)}B`
+  if (v >= 1e6) return `R$ ${(v / 1e6).toFixed(1)}M`
+  if (v >= 1e3) return `R$ ${(v / 1e3).toFixed(1)}mil`
+  return `R$ ${v.toFixed(0)}`
+}
 
 export default function SebraeUF() {
   const { uf } = useParams<{ uf: string }>()
   const navigate = useNavigate()
-  const currentUF = uf?.toUpperCase() || 'SP'
+  const currentUF = uf?.toUpperCase() || 'AM'
+
+  const [dash, setDash] = useState<UFDash | null>(null)
+  const [radar, setRadar] = useState<RadarItem[]>([])
+  const [cruzamento, setCruzamento] = useState<CruzamentoItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    Promise.all([
+      api.get<UFDash>(`/api/v1/sebrae-uf/${currentUF}/dashboard`),
+      api.get<RadarItem[]>(`/api/v1/sebrae-uf/${currentUF}/radar`),
+      api.get<CruzamentoItem[]>(`/api/v1/sebrae-uf/${currentUF}/cruzamento`),
+    ])
+      .then(([d, r, c]) => { setDash(d); setRadar(r); setCruzamento(c) })
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [currentUF])
 
   function handleUFChange(e: React.ChangeEvent<HTMLSelectElement>) {
     navigate(`/sebrae-uf/${e.target.value}`)
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-pulse text-gray-400 text-lg">Carregando dados de {currentUF}...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-2">
+        <div className="text-red-400">Erro ao carregar dados</div>
+        <div className="text-gray-500 text-sm">{error}</div>
+      </div>
+    )
+  }
+
+  const kpis = [
+    { title: 'Oportunidades', value: String(dash?.oportunidades_abertas || 0), trend: 0, subtitle: `abertas em ${currentUF}`, color: '#2ecc71' },
+    { title: 'Valor Total', value: fmtVal(dash?.valor_total_estimado || 0), trend: 0, subtitle: 'em licitacoes', color: '#0080FF' },
+    { title: 'Desertos', value: String(dash?.desertos_fornecimento || 0), trend: 0, subtitle: 'sem fornecedor local', color: '#e74c3c' },
+    { title: '% MPE', value: `${dash?.participacao_mpe_percentual || 0}%`, trend: 0, subtitle: 'participacao MPE', color: '#f39c12' },
+  ]
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-white">
-          Radar de Oportunidades —{' '}
-          <span className="text-obs-blue-light">{currentUF}</span>
-        </h1>
+      <div className="flex items-center gap-4">
+        <h1 className="text-2xl font-bold text-white">Painel SEBRAE</h1>
         <select
           value={currentUF}
           onChange={handleUFChange}
-          className="w-full rounded-lg border border-white/10 bg-obs-bg px-4 py-2 text-sm text-gray-300 outline-none focus:border-obs-blue sm:w-auto"
+          className="rounded-lg border border-white/10 bg-obs-bg-dark px-3 py-2 text-sm font-semibold text-obs-blue outline-none focus:border-obs-blue"
         >
-          {UFS.map((sigla) => (
-            <option key={sigla} value={sigla}>
-              {sigla}
-            </option>
-          ))}
+          {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
         </select>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <KPICard
-            key={kpi.title}
-            title={kpi.title}
-            value={kpi.value}
-            trend={kpi.trend}
-            subtitle={kpi.subtitle}
-            color={kpi.color}
-          />
-        ))}
+        {kpis.map((kpi) => <KPICard key={kpi.title} {...kpi} />)}
       </div>
 
-      <div className="rounded-xl border border-white/5 bg-obs-bg p-4">
-        <h3 className="mb-3 text-sm font-medium text-gray-400">
-          Oportunidades por CNAE em {currentUF}
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs uppercase text-gray-500">
-                <th className="px-3 py-2">CNAE</th>
-                <th className="px-3 py-2">Descricao</th>
-                <th className="px-3 py-2 text-right">Demanda/mes</th>
-                <th className="px-3 py-2 text-right">MPEs ativas</th>
-                <th className="px-3 py-2 text-center">Sinal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockRadar.map((row) => (
-                <tr
-                  key={row.cnae_divisao}
-                  className="border-b border-white/5 transition-colors hover:bg-white/5"
-                >
-                  <td className="px-3 py-3 font-mono text-gray-300">
-                    {row.cnae_divisao}
-                  </td>
-                  <td className="px-3 py-3 text-gray-300">
-                    {row.cnae_descricao}
-                  </td>
-                  <td className="px-3 py-3 text-right text-gray-300">
-                    {row.demanda}
-                  </td>
-                  <td className="px-3 py-3 text-right text-gray-300">
-                    {row.qtd_mpes}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                      style={{
-                        backgroundColor: `${SINAL_COLORS[row.sinal]}18`,
-                        color: SINAL_COLORS[row.sinal],
-                      }}
-                    >
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: SINAL_COLORS[row.sinal] }}
-                      />
-                      {SINAL_LABELS[row.sinal]}
-                    </span>
-                  </td>
+      {radar.length > 0 && (
+        <div className="rounded-xl border border-white/5 bg-obs-bg p-4">
+          <h2 className="mb-4 text-lg font-semibold text-white">Radar de Oportunidades</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-300">
+              <thead className="text-xs uppercase text-gray-500 border-b border-white/10">
+                <tr>
+                  <th className="px-3 py-2">CNAE</th>
+                  <th className="px-3 py-2">Orgao</th>
+                  <th className="px-3 py-2">Valor</th>
+                  <th className="px-3 py-2">Sinal</th>
+                  <th className="px-3 py-2">MPEs</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {radar.slice(0, 15).map((r) => (
+                  <tr key={r.id} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="px-3 py-2 text-xs">{r.cnae_descricao || r.cnae_divisao}</td>
+                    <td className="px-3 py-2 text-xs max-w-[200px] truncate">{r.orgao}</td>
+                    <td className="px-3 py-2 text-xs">{fmtVal(r.valor_estimado || 0)}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-white ${SINAL_COLORS[r.sinal] || 'bg-gray-600'}`}>
+                        {SINAL_LABELS[r.sinal] || r.sinal}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-center">{r.qtd_mpes_regiao}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      <CruzamentoScatter
-        title={`Cruzamento oferta x demanda — ${currentUF}`}
-        data={mockScatter}
-      />
+      {cruzamento.length > 0 && (
+        <CruzamentoScatter title={`Cruzamento oferta x demanda — ${currentUF}`} data={cruzamento} />
+      )}
+
+      {radar.length === 0 && cruzamento.length === 0 && (
+        <div className="rounded-xl border border-white/5 bg-obs-bg p-8 text-center text-gray-500">
+          Nenhuma oportunidade encontrada para {currentUF} no periodo atual.
+          Os dados sao atualizados diariamente via PNCP.
+        </div>
+      )}
     </div>
   )
 }
