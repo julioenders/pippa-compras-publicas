@@ -104,52 +104,63 @@ async def buscar_oportunidades(
         .subquery("ultimo_cruzamento")
     )
 
-    stmt = (
-        select(
-            Contratacao.id,
-            Contratacao.orgao_nome,
-            Contratacao.objeto,
-            Contratacao.valor_estimado,
-            Contratacao.exclusiva_mpe,
-            Contratacao.data_encerramento_proposta,
-            Contratacao.modalidade_nome,
-            Contratacao.uf,
-            Contratacao.municipio_ibge,
-            cruzamento_sub.c.sinal,
-            cruzamento_sub.c.score,
-            cruzamento_sub.c.qtd_mpes_regiao,
-        )
-        .join(Item, Item.contratacao_id == Contratacao.id)
-        .outerjoin(
-            cruzamento_sub,
-            cruzamento_sub.c.contratacao_id == Contratacao.id,
-        )
-        .where(
-            and_(
-                or_(
-                    Contratacao.data_encerramento_proposta >= hoje,
-                    Contratacao.data_encerramento_proposta.is_(None),
-                ),
-                Contratacao.uf == uf,
-                Item.cnae_mapeado.like(f"{cnae[:2]}%"),  # match by CNAE division
-            )
-        )
-    )
+    base_cols = [
+        Contratacao.id,
+        Contratacao.orgao_nome,
+        Contratacao.objeto,
+        Contratacao.valor_estimado,
+        Contratacao.exclusiva_mpe,
+        Contratacao.data_encerramento_proposta,
+        Contratacao.modalidade_nome,
+        Contratacao.uf,
+        Contratacao.municipio_ibge,
+        cruzamento_sub.c.sinal,
+        cruzamento_sub.c.score,
+        cruzamento_sub.c.qtd_mpes_regiao,
+    ]
 
-    if municipio_ibge:
-        stmt = stmt.where(Contratacao.municipio_ibge == municipio_ibge)
+    base_where = [
+        or_(
+            Contratacao.data_encerramento_proposta >= hoje,
+            Contratacao.data_encerramento_proposta.is_(None),
+        ),
+        Contratacao.uf == uf,
+    ]
 
-    # Ordering: exclusive MPE first, then by score desc, then nearest deadline
-    stmt = stmt.order_by(
+    base_order = [
         Contratacao.exclusiva_mpe.desc(),
         cruzamento_sub.c.score.desc().nulls_last(),
         Contratacao.data_encerramento_proposta.asc(),
-    ).limit(limite)
+    ]
+
+    # Try with CNAE filter via Item join first
+    stmt = (
+        select(*base_cols)
+        .join(Item, Item.contratacao_id == Contratacao.id)
+        .outerjoin(cruzamento_sub, cruzamento_sub.c.contratacao_id == Contratacao.id)
+        .where(and_(*base_where, Item.cnae_mapeado.like(f"{cnae[:2]}%")))
+    )
+    if municipio_ibge:
+        stmt = stmt.where(Contratacao.municipio_ibge == municipio_ibge)
+    stmt = stmt.order_by(*base_order).limit(limite)
 
     result = await db.execute(stmt)
     rows = result.all()
 
-    # Fallback: if database is empty, try the PNCP API directly
+    # Fallback 1: show all contratações for the UF (no CNAE filter)
+    if not rows:
+        stmt = (
+            select(*base_cols)
+            .outerjoin(cruzamento_sub, cruzamento_sub.c.contratacao_id == Contratacao.id)
+            .where(and_(*base_where))
+        )
+        if municipio_ibge:
+            stmt = stmt.where(Contratacao.municipio_ibge == municipio_ibge)
+        stmt = stmt.order_by(*base_order).limit(limite)
+        result = await db.execute(stmt)
+        rows = result.all()
+
+    # Fallback 2: try PNCP API directly
     if not rows:
         return await _fallback_pncp(cnae, uf, municipio_ibge, limite)
 
@@ -172,6 +183,7 @@ async def buscar_oportunidades(
             "sinal_descricao": _SINAL_LABEL.get(sinal_valor, sinal_valor),
             "score": float(row.score) if row.score else None,
             "qtd_concorrentes_regiao": row.qtd_mpes_regiao,
+            "fonte": "pncp_db",
         })
 
     return oportunidades
