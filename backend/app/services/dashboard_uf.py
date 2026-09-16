@@ -103,7 +103,15 @@ async def radar_oportunidades(
     """
     hoje = date.today()
 
-    # Subquery for latest cruzamento per contratacao
+    max_id_sub = (
+        select(
+            Cruzamento.contratacao_id,
+            func.max(Cruzamento.id).label("max_id"),
+        )
+        .group_by(Cruzamento.contratacao_id)
+        .subquery("max_cruzamento")
+    )
+
     cruzamento_sub = (
         select(
             Cruzamento.contratacao_id,
@@ -113,8 +121,13 @@ async def radar_oportunidades(
             Cruzamento.cnae_descricao,
             Cruzamento.qtd_mpes_regiao,
         )
-        .distinct(Cruzamento.contratacao_id)
-        .order_by(Cruzamento.contratacao_id, Cruzamento.created_at.desc())
+        .join(
+            max_id_sub,
+            and_(
+                Cruzamento.contratacao_id == max_id_sub.c.contratacao_id,
+                Cruzamento.id == max_id_sub.c.max_id,
+            ),
+        )
         .subquery("ultimo_cruzamento")
     )
 

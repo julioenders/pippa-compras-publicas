@@ -13,7 +13,10 @@ class Base(DeclarativeBase):
 
 def init_engine():
     global engine, async_session
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    kwargs = {"echo": False}
+    if settings.DATABASE_URL.startswith("sqlite"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+    engine = create_async_engine(settings.DATABASE_URL, **kwargs)
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

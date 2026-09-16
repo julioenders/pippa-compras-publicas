@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    DATABASE_URL: str = "postgresql+asyncpg://pippa:pippa_dev@localhost:5432/pippa_compras"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./pippa_compras.db"
 
     PNCP_BASE_URL: str = "https://pncp.gov.br/api/consulta"
     PNCP_INTEGRATION_URL: str = "https://pncp.gov.br/api/pncp"

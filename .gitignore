@@ -26,6 +26,7 @@ Thumbs.db
 # Backend
 *.db
 *.sqlite3
+pippa_compras.db
 
 # Frontend
 frontend/node_modules/

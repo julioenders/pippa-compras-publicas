@@ -26,14 +26,21 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        render_as_batch=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
+    engine_config = config.get_section(config.config_ini_section, {})
+    if settings.DATABASE_URL.startswith("sqlite"):
+        engine_config["sqlalchemy.connect_args"] = {"check_same_thread": False}
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        engine_config,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
