@@ -1,0 +1,424 @@
+{
+  "meta": {
+    "versao": "1.0.0",
+    "descricao": "Mapeamento de grupos CATMAT/CATSER para divisoes CNAE",
+    "fonte_catmat": "Catalogo de Materiais do Governo Federal (CATMAT/SIASG)",
+    "fonte_catser": "Catalogo de Servicos do Governo Federal (CATSER/SIASG)",
+    "fonte_cnae": "Classificacao Nacional de Atividades Economicas (IBGE) - CNAE 2.0",
+    "atualizado_em": "2026-09-16"
+  },
+  "catmat_groups": {
+    "10": {
+      "descricao": "Armas e acessorios",
+      "cnae_divisao": "C25",
+      "cnae_descricao": "Fabricacao de produtos de metal, exceto maquinas e equipamentos"
+    },
+    "13": {
+      "descricao": "Maquinas e equipamentos para lavanderia e limpeza a seco",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "14": {
+      "descricao": "Maquinas para guindaste, transporte e terraplenagem",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "15": {
+      "descricao": "Tintas, diluentes, vernizes e adesivos",
+      "cnae_divisao": "C20",
+      "cnae_descricao": "Fabricacao de produtos quimicos"
+    },
+    "16": {
+      "descricao": "Componentes eletricos e eletronicos",
+      "cnae_divisao": "C27",
+      "cnae_descricao": "Fabricacao de maquinas, aparelhos e materiais eletricos"
+    },
+    "19": {
+      "descricao": "Embarcacoes, pequenas embarcacoes e pontoes",
+      "cnae_divisao": "C30",
+      "cnae_descricao": "Fabricacao de outros equipamentos de transporte, exceto veiculos automotores"
+    },
+    "20": {
+      "descricao": "Material de copa e cozinha",
+      "cnae_divisao": "C25",
+      "cnae_descricao": "Fabricacao de produtos de metal, exceto maquinas e equipamentos"
+    },
+    "22": {
+      "descricao": "Material ferroviario",
+      "cnae_divisao": "C30",
+      "cnae_descricao": "Fabricacao de outros equipamentos de transporte, exceto veiculos automotores"
+    },
+    "23": {
+      "descricao": "Veiculos a motor, reboques e bicicletas",
+      "cnae_divisao": "C29",
+      "cnae_descricao": "Fabricacao de veiculos automotores, reboques e carrocerias"
+    },
+    "24": {
+      "descricao": "Tratores",
+      "cnae_divisao": "C29",
+      "cnae_descricao": "Fabricacao de veiculos automotores, reboques e carrocerias"
+    },
+    "25": {
+      "descricao": "Pecas de veiculos",
+      "cnae_divisao": "C29",
+      "cnae_descricao": "Fabricacao de veiculos automotores, reboques e carrocerias"
+    },
+    "26": {
+      "descricao": "Pneus, camaras de ar e material de recauchutagem",
+      "cnae_divisao": "C22",
+      "cnae_descricao": "Fabricacao de produtos de borracha e de material plastico"
+    },
+    "30": {
+      "descricao": "Equipamentos mecanicos de uso geral",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "31": {
+      "descricao": "Rolamentos e mancais",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "34": {
+      "descricao": "Ferragens, abrasivos e material metalurgico",
+      "cnae_divisao": "C25",
+      "cnae_descricao": "Fabricacao de produtos de metal, exceto maquinas e equipamentos"
+    },
+    "36": {
+      "descricao": "Equipamentos especiais de trabalho",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    },
+    "40": {
+      "descricao": "Cabos, fios e cordas",
+      "cnae_divisao": "C27",
+      "cnae_descricao": "Fabricacao de maquinas, aparelhos e materiais eletricos"
+    },
+    "41": {
+      "descricao": "Refrigeracao e ar condicionado",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "42": {
+      "descricao": "Equipamentos contra incendio, de resgate e de seguranca",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    },
+    "43": {
+      "descricao": "Bombas e compressores",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "44": {
+      "descricao": "Fornos, geradores de vapor e equipamentos de energia nuclear",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "46": {
+      "descricao": "Purificacao e tratamento de agua",
+      "cnae_divisao": "E36",
+      "cnae_descricao": "Captacao, tratamento e distribuicao de agua"
+    },
+    "47": {
+      "descricao": "Tubos, conexoes e valvulas",
+      "cnae_divisao": "C25",
+      "cnae_descricao": "Fabricacao de produtos de metal, exceto maquinas e equipamentos"
+    },
+    "48": {
+      "descricao": "Valvulas",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "51": {
+      "descricao": "Ferramentas manuais",
+      "cnae_divisao": "C25",
+      "cnae_descricao": "Fabricacao de produtos de metal, exceto maquinas e equipamentos"
+    },
+    "52": {
+      "descricao": "Instrumentos de medicao",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "53": {
+      "descricao": "Artigos de ferragens e materiais de construcao",
+      "cnae_divisao": "G47",
+      "cnae_descricao": "Comercio varejista"
+    },
+    "54": {
+      "descricao": "Edificacoes prefabricadas e andaimes",
+      "cnae_divisao": "F41",
+      "cnae_descricao": "Construcao de edificios"
+    },
+    "55": {
+      "descricao": "Madeiras, serraria e compensados",
+      "cnae_divisao": "C16",
+      "cnae_descricao": "Fabricacao de produtos de madeira"
+    },
+    "56": {
+      "descricao": "Material de construcao civil",
+      "cnae_divisao": "C23",
+      "cnae_descricao": "Fabricacao de produtos de minerais nao-metalicos"
+    },
+    "58": {
+      "descricao": "Equipamentos de comunicacao e deteccao",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "59": {
+      "descricao": "Componentes eletricos e eletronicos",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "61": {
+      "descricao": "Fios e cabos eletricos e equipamentos de energia",
+      "cnae_divisao": "C27",
+      "cnae_descricao": "Fabricacao de maquinas, aparelhos e materiais eletricos"
+    },
+    "62": {
+      "descricao": "Lampadas e equipamentos de iluminacao",
+      "cnae_divisao": "C27",
+      "cnae_descricao": "Fabricacao de maquinas, aparelhos e materiais eletricos"
+    },
+    "63": {
+      "descricao": "Sistemas de alarme, sinalizacao e deteccao",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "65": {
+      "descricao": "Instrumentos medicos e cirurgicos",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    },
+    "66": {
+      "descricao": "Instrumentos e equipamentos de laboratorio",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    },
+    "67": {
+      "descricao": "Equipamento fotografico",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "68": {
+      "descricao": "Produtos quimicos",
+      "cnae_divisao": "C20",
+      "cnae_descricao": "Fabricacao de produtos quimicos"
+    },
+    "69": {
+      "descricao": "Material de treinamento e equipamento audiovisual",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "70": {
+      "descricao": "Equipamentos de informatica, software e suprimentos de TI",
+      "cnae_divisao": "C26",
+      "cnae_descricao": "Fabricacao de equipamentos de informatica, produtos eletronicos e opticos"
+    },
+    "71": {
+      "descricao": "Mobiliario",
+      "cnae_divisao": "C31",
+      "cnae_descricao": "Fabricacao de moveis"
+    },
+    "72": {
+      "descricao": "Utensilios domesticos e comerciais e equipamentos hoteleiros",
+      "cnae_divisao": "C31",
+      "cnae_descricao": "Fabricacao de moveis"
+    },
+    "73": {
+      "descricao": "Equipamentos para preparacao e servico de alimentos",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "75": {
+      "descricao": "Material de escritorio e papelaria",
+      "cnae_divisao": "C17",
+      "cnae_descricao": "Fabricacao de celulose, papel e produtos de papel"
+    },
+    "76": {
+      "descricao": "Livros, mapas e publicacoes",
+      "cnae_divisao": "J58",
+      "cnae_descricao": "Edicao e edicao integrada a impressao"
+    },
+    "77": {
+      "descricao": "Instrumentos musicais e fonograficos",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    },
+    "78": {
+      "descricao": "Material recreativo e esportivo",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    },
+    "79": {
+      "descricao": "Material de limpeza e higienizacao",
+      "cnae_divisao": "C20",
+      "cnae_descricao": "Fabricacao de produtos quimicos"
+    },
+    "80": {
+      "descricao": "Tecidos, couros e vestuario",
+      "cnae_divisao": "C14",
+      "cnae_descricao": "Confeccao de artigos do vestuario e acessorios"
+    },
+    "81": {
+      "descricao": "Recipientes e materiais de embalagem",
+      "cnae_divisao": "C22",
+      "cnae_descricao": "Fabricacao de produtos de borracha e de material plastico"
+    },
+    "83": {
+      "descricao": "Artigos texteis, roupas de cama e colchoes",
+      "cnae_divisao": "C13",
+      "cnae_descricao": "Fabricacao de produtos texteis"
+    },
+    "84": {
+      "descricao": "Roupas, equipamentos e insegnias",
+      "cnae_divisao": "C14",
+      "cnae_descricao": "Confeccao de artigos do vestuario e acessorios"
+    },
+    "85": {
+      "descricao": "Artigos de higiene pessoal e uso domestico",
+      "cnae_divisao": "C20",
+      "cnae_descricao": "Fabricacao de produtos quimicos"
+    },
+    "87": {
+      "descricao": "Material agricola",
+      "cnae_divisao": "C28",
+      "cnae_descricao": "Fabricacao de maquinas e equipamentos"
+    },
+    "89": {
+      "descricao": "Generos alimenticios",
+      "cnae_divisao": "C10",
+      "cnae_descricao": "Fabricacao de produtos alimenticios"
+    },
+    "91": {
+      "descricao": "Combustiveis, lubrificantes, oleos e ceras",
+      "cnae_divisao": "C19",
+      "cnae_descricao": "Fabricacao de coque, de produtos derivados do petroleo e de biocombustiveis"
+    },
+    "93": {
+      "descricao": "Materiais e equipamentos nao metalicos",
+      "cnae_divisao": "C23",
+      "cnae_descricao": "Fabricacao de produtos de minerais nao-metalicos"
+    },
+    "94": {
+      "descricao": "Material de acondicionamento e armazenamento",
+      "cnae_divisao": "C25",
+      "cnae_descricao": "Fabricacao de produtos de metal, exceto maquinas e equipamentos"
+    },
+    "95": {
+      "descricao": "Barras, chapas e perfis de metal",
+      "cnae_divisao": "C24",
+      "cnae_descricao": "Metalurgia"
+    },
+    "96": {
+      "descricao": "Minerios, minerais e seus produtos primarios",
+      "cnae_divisao": "B08",
+      "cnae_descricao": "Extracao de minerais nao-metalicos"
+    },
+    "99": {
+      "descricao": "Materiais diversos",
+      "cnae_divisao": "C32",
+      "cnae_descricao": "Fabricacao de produtos diversos"
+    }
+  },
+  "catser_groups": {
+    "01": {
+      "descricao": "Servicos de consultoria em gestao e administracao",
+      "cnae_divisao": "M70",
+      "cnae_descricao": "Atividades de consultoria em gestao empresarial"
+    },
+    "02": {
+      "descricao": "Servicos de tecnologia da informacao",
+      "cnae_divisao": "J62",
+      "cnae_descricao": "Atividades dos servicos de tecnologia da informacao"
+    },
+    "03": {
+      "descricao": "Servicos de telecomunicacoes",
+      "cnae_divisao": "J61",
+      "cnae_descricao": "Telecomunicacoes"
+    },
+    "04": {
+      "descricao": "Servicos de limpeza e conservacao",
+      "cnae_divisao": "N81",
+      "cnae_descricao": "Servicos para edificios e atividades paisagisticas"
+    },
+    "05": {
+      "descricao": "Servicos de vigilancia e seguranca",
+      "cnae_divisao": "N80",
+      "cnae_descricao": "Atividades de vigilancia, seguranca e investigacao"
+    },
+    "06": {
+      "descricao": "Servicos de manutencao e reparacao de edificios",
+      "cnae_divisao": "F43",
+      "cnae_descricao": "Servicos especializados para construcao"
+    },
+    "07": {
+      "descricao": "Servicos de manutencao de equipamentos e maquinas",
+      "cnae_divisao": "C33",
+      "cnae_descricao": "Manutencao, reparacao e instalacao de maquinas e equipamentos"
+    },
+    "08": {
+      "descricao": "Servicos de transporte e logistica",
+      "cnae_divisao": "H49",
+      "cnae_descricao": "Transporte terrestre"
+    },
+    "09": {
+      "descricao": "Servicos de alimentacao e catering",
+      "cnae_divisao": "I56",
+      "cnae_descricao": "Alimentacao"
+    },
+    "10": {
+      "descricao": "Servicos de treinamento e capacitacao",
+      "cnae_divisao": "P85",
+      "cnae_descricao": "Educacao"
+    },
+    "11": {
+      "descricao": "Servicos de publicidade e propaganda",
+      "cnae_divisao": "M73",
+      "cnae_descricao": "Publicidade e pesquisa de mercado"
+    },
+    "12": {
+      "descricao": "Servicos de engenharia e arquitetura",
+      "cnae_divisao": "M71",
+      "cnae_descricao": "Servicos de arquitetura e engenharia"
+    },
+    "13": {
+      "descricao": "Servicos de saude",
+      "cnae_divisao": "Q86",
+      "cnae_descricao": "Atividades de atencao a saude humana"
+    },
+    "14": {
+      "descricao": "Servicos de impressao e reproducao",
+      "cnae_divisao": "C18",
+      "cnae_descricao": "Impressao e reproducao de gravacoes"
+    },
+    "15": {
+      "descricao": "Servicos de locacao de veiculos e equipamentos",
+      "cnae_divisao": "N77",
+      "cnae_descricao": "Alugueis nao-imobiliarios e gestao de ativos intangiveis nao-financeiros"
+    },
+    "16": {
+      "descricao": "Servicos de contabilidade e auditoria",
+      "cnae_divisao": "M69",
+      "cnae_descricao": "Atividades juridicas, de contabilidade e de auditoria"
+    },
+    "17": {
+      "descricao": "Servicos de comunicacao e eventos",
+      "cnae_divisao": "R93",
+      "cnae_descricao": "Atividades esportivas e de recreacao e lazer"
+    },
+    "18": {
+      "descricao": "Servicos de pesquisa e desenvolvimento",
+      "cnae_divisao": "M72",
+      "cnae_descricao": "Pesquisa e desenvolvimento cientifico"
+    },
+    "19": {
+      "descricao": "Servicos de manutencao de veiculos",
+      "cnae_divisao": "G45",
+      "cnae_descricao": "Comercio e reparacao de veiculos automotores e motocicletas"
+    },
+    "20": {
+      "descricao": "Servicos de hospedagem e hotelaria",
+      "cnae_divisao": "I55",
+      "cnae_descricao": "Alojamento"
+    }
+  }
+}

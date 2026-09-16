@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --obs-bg: #132D42;
+  --obs-bg-dark: #0F1F2D;
+  --obs-blue: #0080FF;
+  --obs-blue-light: #40BBFF;
+  --obs-accent: #2ca4ec;
+  --obs-red: #e03131;
+  --signal-green: #2ecc71;
+  --signal-yellow: #f39c12;
+  --signal-orange: #e67e22;
+  --signal-red: #e74c3c;
+  --signal-gray: #95a5a6;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'DejaVu Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer components {
+  .signal-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium;
+  }
+
+  .signal-oportunidade {
+    @apply bg-signal-green/20 text-signal-green;
+  }
+
+  .signal-competitivo {
+    @apply bg-signal-yellow/20 text-signal-yellow;
+  }
+
+  .signal-cautela {
+    @apply bg-signal-orange/20 text-signal-orange;
+  }
+
+  .signal-saturado {
+    @apply bg-signal-red/20 text-signal-red;
+  }
+
+  .signal-deserto {
+    @apply bg-signal-gray/20 text-signal-gray;
+  }
+}
