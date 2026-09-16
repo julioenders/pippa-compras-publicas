@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_engine
-from app.routers import health, contratacoes, gestor_publico, sebrae_nacional, sebrae_uf, mpe
+from app.routers import health, contratacoes, gestor_publico, sebrae_nacional, sebrae_uf, mpe, admin
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +54,4 @@ app.include_router(gestor_publico.router, prefix="/api/v1/gestor-publico", tags=
 app.include_router(sebrae_nacional.router, prefix="/api/v1/sebrae-nacional", tags=["SEBRAE Nacional"])
 app.include_router(sebrae_uf.router, prefix="/api/v1/sebrae-uf", tags=["SEBRAE UF"])
 app.include_router(mpe.router, prefix="/api/v1/mpe", tags=["MPE"])
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
