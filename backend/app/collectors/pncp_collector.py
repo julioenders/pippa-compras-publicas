@@ -70,6 +70,10 @@ def _extrair_contratacao(raw: dict) -> dict:
     orgao_cnpj = orgao.get("cnpj", raw.get("cnpj", ""))
     orgao_nome = orgao.get("razaoSocial", raw.get("nomeOrgao"))
 
+    unidade = raw.get("unidadeOrgao", {})
+    uf_extraido = unidade.get("ufSigla") or raw.get("uf") or classificacao.uf or ""
+    municipio_ibge = unidade.get("codigoIbge") or raw.get("codigoMunicipioIbge") or classificacao.municipio_ibge
+
     return {
         "orgao_cnpj": orgao_cnpj,
         "orgao_nome": orgao_nome,
@@ -80,8 +84,8 @@ def _extrair_contratacao(raw: dict) -> dict:
         "modalidade_nome": raw.get("modalidadeNome") or classificacao.modalidade,
         "valor_estimado": _parse_decimal(raw.get("valorTotalEstimado")),
         "esfera": classificacao.esfera.value,
-        "uf": raw.get("uf") or classificacao.uf,
-        "municipio_ibge": raw.get("codigoMunicipioIbge") or classificacao.municipio_ibge,
+        "uf": uf_extraido,
+        "municipio_ibge": municipio_ibge,
         "exclusiva_mpe": classificacao.exclusiva_mpe,
         "data_publicacao": _parse_date_field(raw.get("dataPublicacaoPncp"))
         or date.today(),
