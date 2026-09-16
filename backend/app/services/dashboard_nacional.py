@@ -192,10 +192,13 @@ async def tendencias(
     """
     data_inicio = date.today() - timedelta(days=periodo_meses * 30)
 
+    col_ano = extract("year", Contratacao.data_publicacao).label("ano")
+    col_mes = extract("month", Contratacao.data_publicacao).label("mes")
+
     stmt = (
         select(
-            extract("year", Contratacao.data_publicacao).label("ano"),
-            extract("month", Contratacao.data_publicacao).label("mes"),
+            col_ano,
+            col_mes,
             func.count(Contratacao.id).label("total"),
             func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
             func.count(
@@ -219,8 +222,8 @@ async def tendencias(
                 Contratacao.data_publicacao.is_not(None),
             )
         )
-        .group_by("ano", "mes")
-        .order_by("ano", "mes")
+        .group_by(col_ano, col_mes)
+        .order_by(col_ano, col_mes)
     )
 
     result = (await db.execute(stmt)).all()
