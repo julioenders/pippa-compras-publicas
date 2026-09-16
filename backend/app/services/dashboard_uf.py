@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select, func, case, and_, distinct
+from sqlalchemy import select, func, case, and_, or_, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -45,14 +45,17 @@ async def montar_dashboard(
     """
     hoje = date.today()
 
-    # 1 -- Oportunidades abertas
+    # 1 -- Oportunidades abertas (inclui sem data de encerramento)
     stmt_abertas = select(
         func.count(Contratacao.id).label("total"),
         func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
     ).where(
         and_(
             Contratacao.uf == uf,
-            Contratacao.data_encerramento_proposta >= hoje,
+            or_(
+                Contratacao.data_encerramento_proposta >= hoje,
+                Contratacao.data_encerramento_proposta.is_(None),
+            ),
         )
     )
     abertas = (await db.execute(stmt_abertas)).one()
@@ -154,7 +157,10 @@ async def radar_oportunidades(
         .where(
             and_(
                 Contratacao.uf == uf,
-                Contratacao.data_encerramento_proposta >= hoje,
+                or_(
+                    Contratacao.data_encerramento_proposta >= hoje,
+                    Contratacao.data_encerramento_proposta.is_(None),
+                ),
             )
         )
         .order_by(

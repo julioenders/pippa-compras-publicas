@@ -126,7 +126,10 @@ async def buscar_oportunidades(
         )
         .where(
             and_(
-                Contratacao.data_encerramento_proposta >= hoje,
+                or_(
+                    Contratacao.data_encerramento_proposta >= hoje,
+                    Contratacao.data_encerramento_proposta.is_(None),
+                ),
                 Contratacao.uf == uf,
                 Item.cnae_mapeado.like(f"{cnae[:2]}%"),  # match by CNAE division
             )
