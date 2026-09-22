@@ -353,7 +353,7 @@ def _montar_guia_participacao(contratacao: Contratacao) -> list[dict[str, str]]:
             "passo": "1",
             "titulo": "Leia o edital completo",
             "descricao": (
-                "Acesse o Portal Nacional de Contratacoes Publicas (PNCP) e "
+                "Acesse o Diario Oficial da Uniao (DOU Secao 3) e "
                 "busque pelo edital deste orgao. Leia com atencao os requisitos "
                 "de habilitacao e as especificacoes tecnicas."
             ),

@@ -63,7 +63,7 @@ async def guia_modalidade(
             "tempo_medio": "5 a 15 dias",
             "dificuldade": "Baixa",
             "dicas": [
-                "Fique atento as publicacoes nos diarios oficiais e no PNCP.",
+                "Fique atento as publicacoes no Diario Oficial da Uniao (DOU Secao 3).",
                 "A proposta pode ser enviada de forma simples, sem sistema eletronico.",
                 "Negocie diretamente com o orgao - muitas vezes e possivel.",
                 "Ideal para quem esta comecando a vender para o governo.",
@@ -92,5 +92,5 @@ async def guia_modalidade(
         "valor_limite": None,
         "tempo_medio": None,
         "dificuldade": None,
-        "dicas": ["Consulte o portal PNCP para mais informacoes sobre esta modalidade."],
+        "dicas": ["Consulte o DOU Secao 3 para mais informacoes sobre esta modalidade."],
     }

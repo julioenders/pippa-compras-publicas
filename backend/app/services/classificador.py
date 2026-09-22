@@ -203,7 +203,7 @@ def classificar_beneficio_mpe(
 
 
 def classificar(contratacao: dict) -> Classificacao:
-    """Classifica uma contratacao do PNCP em todas as dimensoes da matriz."""
+    """Classifica uma contratacao em todas as dimensoes da matriz."""
     modalidade_cod = contratacao.get("modalidadeId", 0)
     valor = contratacao.get("valorTotalEstimado")
     status = contratacao.get("situacaoCompraDescricao")

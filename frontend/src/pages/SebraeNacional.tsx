@@ -81,7 +81,7 @@ export default function SebraeNacional() {
   }))
 
   const kpis = [
-    { title: 'Contratacoes BR', value: (dashboard?.total_contratacoes || 0).toLocaleString('pt-BR'), trend: 0, subtitle: 'dados reais PNCP', color: '#2ecc71' },
+    { title: 'Contratacoes BR', value: (dashboard?.total_contratacoes || 0).toLocaleString('pt-BR'), trend: 0, subtitle: 'dados DOU Secao 3', color: '#2ecc71' },
     { title: 'Valor Total', value: fmtVal(dashboard?.valor_total_estimado || 0), trend: 0, subtitle: 'valor estimado', color: '#0080FF' },
     { title: '% MPE Nacional', value: `${dashboard?.participacao_mpe_nacional || 0}%`, trend: 0, subtitle: 'participacao em valor', color: '#f39c12' },
     { title: 'Desertos', value: String(dashboard?.desertos_fornecimento || 0), trend: 0, subtitle: 'regioes sem fornecedor', color: '#e74c3c' },
