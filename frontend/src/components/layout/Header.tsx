@@ -8,6 +8,7 @@ const navItems = [
   { label: PERFIS.sebraeNacional.titulo, to: PERFIS.sebraeNacional.rota },
   { label: PERFIS.sebraeUF.titulo, to: '/sebrae-uf/SP' },
   { label: PERFIS.mpe.titulo, to: PERFIS.mpe.rota },
+  { label: 'Coletor', to: '/coletor' },
 ]
 
 export default function Header() {

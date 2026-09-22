@@ -810,24 +810,21 @@ def _atualizar_contratacao(
 # Ponto de entrada
 # ---------------------------------------------------------------------------
 
-async def coletar_dou_secao3():
+async def coletar_dou_secao3(data_alvo: date | None = None) -> dict:
     """Coleta publicacoes da Secao 3 do DOU e cria registros estruturados.
 
-    Para cada publicacao relevante:
+    Args:
+        data_alvo: Data para coletar.  Se ``None``, coleta o dia anterior.
 
-    1. Classifica o tipo de ato (aviso, resultado, extrato, retificacao, ...).
-    2. Extrai campos estruturados (CNPJ, valor, modalidade, datas, ...).
-    3. Cria ou atualiza registros ``Contratacao`` com eventos de ciclo de vida.
-    4. Cria registros ``Item`` quando a descricao do objeto esta disponivel.
-    5. Cria registros ``Alerta`` para o perfil SEBRAE UF.
-
-    Chamada pelo scheduler sem parametros.
+    Returns:
+        Dict com estatisticas da coleta.
     """
     logger.info("Iniciando coleta DOU Seção 3 (coletor primário)")
     _ensure_session()
 
-    ontem = date.today() - timedelta(days=1)
-    data_str = ontem.strftime("%Y-%m-%d")
+    if data_alvo is None:
+        data_alvo = date.today() - timedelta(days=1)
+    data_str = data_alvo.strftime("%Y-%m-%d")
 
     client = DOUClient()
 
@@ -835,13 +832,13 @@ async def coletar_dou_secao3():
         publicacoes = await client.buscar_secao3(data_publicacao=data_str)
     except Exception:
         logger.exception("Erro ao buscar DOU Seção 3 para data %s", data_str)
-        return
+        return {"erro": f"Falha ao buscar DOU para {data_str}"}
 
     if not publicacoes:
         logger.info(
             "Nenhuma publicação encontrada no DOU Seção 3 para %s", data_str
         )
-        return
+        return {"data": data_str, "publicacoes_brutas": 0, "relevantes": 0}
 
     logger.info(
         "DOU Seção 3: %d publicações brutas encontradas para %s",
@@ -857,7 +854,7 @@ async def coletar_dou_secao3():
             "Nenhuma publicação relevante encontrada no DOU Seção 3 para %s",
             data_str,
         )
-        return
+        return {"data": data_str, "publicacoes_brutas": len(publicacoes), "relevantes": 0}
 
     logger.info(
         "DOU Seção 3: %d publicações relevantes de %d totais para %s",
@@ -882,7 +879,7 @@ async def coletar_dou_secao3():
         for pub in relevantes:
             try:
                 async with session.begin_nested():
-                    await _processar_publicacao(session, pub, ontem, stats)
+                    await _processar_publicacao(session, pub, data_alvo, stats)
                 batch_count += 1
             except IntegrityError:
                 logger.warning(
@@ -925,3 +922,10 @@ async def coletar_dou_secao3():
         stats["duplicadas"],
         stats["erros"],
     )
+
+    return {
+        "data": data_str,
+        "publicacoes_brutas": len(publicacoes),
+        "relevantes": total_relevantes,
+        **stats,
+    }
