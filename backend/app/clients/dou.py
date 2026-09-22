@@ -1,75 +1,26 @@
 """Cliente para busca na Secao 3 do Diario Oficial da Uniao (DOU).
 
-Estrategia dupla de coleta:
-  1. Playwright (headless browser) -- renderiza o JavaScript do portal e
-     extrai o JSON embutido no elemento do portlet Liferay. E a estrategia
-     primaria pois o portal carrega os resultados via JS.
-  2. HTTP scraping (fallback) -- tenta extrair dados do HTML cru retornado
-     por httpx. Funciona apenas se o portal eventualmente incluir o JSON
-     no HTML inicial (raro, mas mantido como fallback).
+Coleta publicacoes via HTTP puro (sem Playwright/headless browser),
+parseando o JSON que o Liferay embute no HTML server-side dentro do
+elemento portlet ``BuscaDouPortlet_params``.
 
-O Playwright e importado de forma condicional; se nao estiver instalado
-o cliente opera apenas com a estrategia HTTP.
+Como o portal nao suporta paginacao via URL, a cobertura e maximizada
+fazendo multiplas buscas com termos especificos de compras publicas
+(licitacao, pregao, contrato, etc.) e deduplicando por ``urlTitle``.
 """
 
 from __future__ import annotations
 
-import html
+import html as html_mod
 import json
 import logging
 import re
 from datetime import datetime
+from urllib.parse import quote
 
 import httpx
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Playwright availability check
-# ---------------------------------------------------------------------------
-
-_PLAYWRIGHT_AVAILABLE = False
-
-try:
-    from playwright.async_api import async_playwright  # noqa: F401
-
-    _PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    pass
-
-
-def verificar_playwright() -> bool:
-    """Check if Playwright and a Chromium browser are available.
-
-    Returns True if the ``playwright`` package is importable **and** the
-    Chromium browser binary has been installed (via ``playwright install
-    chromium``).
-    """
-    if not _PLAYWRIGHT_AVAILABLE:
-        logger.warning(
-            "Playwright nao esta instalado. "
-            "Instale com: pip install playwright && playwright install chromium"
-        )
-        return False
-
-    try:
-        import subprocess
-        result = subprocess.run(
-            ["python", "-m", "playwright", "install", "--dry-run", "chromium"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        # If dry-run exits 0, the browser is already installed.
-        if result.returncode == 0:
-            return True
-        # Fallback: just check if we can import and assume browser is there.
-        return True
-    except Exception:
-        # If the dry-run check itself fails, assume installed if the import
-        # succeeded -- the actual browser launch will surface errors later.
-        return True
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -79,8 +30,10 @@ _DOU_SEARCH_URL = "https://www.in.gov.br/consulta/-/buscar/dou"
 _DOU_ARTICLE_BASE = "https://www.in.gov.br/web/dou/-/"
 _DOU_BASE = "https://www.in.gov.br"
 
-_PORTLET_ELEMENT_ID = (
-    "#_br_com_seatecnologia_in_buscadou_BuscaDouPortlet_params"
+_PORTLET_RE = re.compile(
+    r'id="_br_com_seatecnologia_in_buscadou_BuscaDouPortlet_params"[^>]*>'
+    r"(.*?)</",
+    re.DOTALL,
 )
 
 _USER_AGENT = (
@@ -98,10 +51,32 @@ _HTTP_HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-_PLAYWRIGHT_TIMEOUT_MS = 60_000  # 60 seconds for page + element wait
-_HTTP_TIMEOUT = 30.0
+_HTTP_TIMEOUT = 45.0
 _RESULTS_PER_PAGE = 75
-_MAX_PAGES = 30  # safety cap: 75 * 30 = 2250 articles max
+
+# Termos de busca para compras publicas -- cada termo gera uma requisicao
+# HTTP separada e os resultados sao deduplicados por urlTitle.
+_TERMOS_COMPRAS = [
+    '"aviso de licitacao"',
+    '"pregao eletronico"',
+    '"resultado de julgamento"',
+    '"extrato de contrato"',
+    '"dispensa de licitacao"',
+    '"inexigibilidade"',
+    '"registro de precos"',
+    '"concorrencia"',
+    '"tomada de precos"',
+    '"credenciamento"',
+    '"chamamento publico"',
+    '"extrato de termo aditivo"',
+    '"homologacao"',
+    '"adjudicacao"',
+    '"aviso de suspensao"',
+    '"aviso de revogacao"',
+    '"aviso de anulacao"',
+    '"aviso de alteracao"',
+    '"edital de licitacao"',
+]
 
 
 # ---------------------------------------------------------------------------
@@ -110,16 +85,16 @@ _MAX_PAGES = 30  # safety cap: 75 * 30 = 2250 articles max
 
 
 class DOUClient:
-    """Cliente para busca na Secao 3 do Diario Oficial da Uniao (DOU).
+    """Cliente HTTP para busca na Secao 3 do DOU.
 
-    Usa Playwright (headless browser) como estrategia primaria e HTTP
-    scraping como fallback.
+    Faz requisicoes HTTP GET ao portal in.gov.br e extrai o JSON que o
+    Liferay embute no HTML server-side.  Nao requer Playwright nem
+    headless browser.
     """
 
-    def __init__(self, *, playwright_timeout_ms: int = _PLAYWRIGHT_TIMEOUT_MS):
+    def __init__(self, *, timeout: float = _HTTP_TIMEOUT):
         self.search_url = _DOU_SEARCH_URL
-        self.playwright_timeout_ms = playwright_timeout_ms
-        self._http_timeout = _HTTP_TIMEOUT
+        self._timeout = timeout
 
     # ------------------------------------------------------------------
     # Public API
@@ -130,401 +105,158 @@ class DOUClient:
         data_publicacao: str,
         termo: str | None = None,
     ) -> list[dict]:
-        """Busca publicacoes na Secao 3 do DOU com paginacao automatica.
+        """Busca publicacoes na Secao 3 do DOU.
+
+        Faz multiplas requisicoes HTTP com termos especificos de compras
+        publicas e deduplica os resultados por ``urlTitle``.
 
         Args:
             data_publicacao: Data no formato ``YYYY-MM-DD``.
-            termo: Termo opcional de busca textual.
+            termo: Termo de busca.  Se fornecido, faz apenas uma busca
+                com esse termo.  Se ``None``, usa a lista padrao de
+                termos de compras publicas.
 
         Returns:
-            Lista de dicts de publicacao.  Cada dict pode conter chaves como
-            ``title``, ``abstract``, ``content``, ``urlTitle``, ``artType``,
-            ``artCategory``, ``pubDate``, ``hierarchy``, entre outras.
+            Lista de dicts com chaves como ``title``, ``content``,
+            ``urlTitle``, ``artType``, ``pubDate``, ``hierarchyStr``, etc.
         """
         date_dou = self._format_date_for_dou(data_publicacao)
 
-        # Strategy 1 -- Playwright (with pagination)
-        if _PLAYWRIGHT_AVAILABLE:
-            try:
-                results = await self._buscar_playwright_paginado(
-                    date_dou, termo
-                )
-                if results:
-                    logger.info(
-                        "Playwright: %d publicacoes encontradas para %s",
-                        len(results),
-                        data_publicacao,
-                    )
-                    return results
-                logger.warning(
-                    "Playwright retornou 0 resultados para %s; "
-                    "tentando fallback HTTP",
-                    data_publicacao,
-                )
-            except Exception:
-                logger.exception(
-                    "Erro na estrategia Playwright para %s; "
-                    "tentando fallback HTTP",
-                    data_publicacao,
-                )
-        else:
+        if termo:
+            results = await self._buscar_termo(date_dou, termo)
             logger.info(
-                "Playwright indisponivel; usando fallback HTTP para %s",
-                data_publicacao,
-            )
-
-        # Strategy 2 -- HTTP fallback (single page only)
-        try:
-            results = await self._buscar_http(date_dou, termo)
-            logger.info(
-                "HTTP fallback: %d publicacoes encontradas para %s",
-                len(results),
-                data_publicacao,
+                "%d publicacoes encontradas para %s (termo: %s)",
+                len(results), data_publicacao, termo,
             )
             return results
-        except Exception:
-            logger.exception(
-                "Erro na estrategia HTTP para %s", data_publicacao
-            )
-            return []
+
+        seen: set[str] = set()
+        all_results: list[dict] = []
+
+        async with httpx.AsyncClient(
+            timeout=self._timeout,
+            follow_redirects=True,
+            headers=_HTTP_HEADERS,
+            verify=False,
+        ) as client:
+            for search_term in _TERMOS_COMPRAS:
+                try:
+                    articles = await self._buscar_termo_com_client(
+                        client, date_dou, search_term,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Erro na busca DOU com termo %s", search_term,
+                        exc_info=True,
+                    )
+                    continue
+
+                new_count = 0
+                for art in articles:
+                    key = art.get("urlTitle") or art.get("classPK", "")
+                    if key and key not in seen:
+                        seen.add(key)
+                        all_results.append(art)
+                        new_count += 1
+
+                logger.debug(
+                    "Termo %s: %d resultados, %d novos (total: %d)",
+                    search_term, len(articles), new_count, len(all_results),
+                )
+
+        logger.info(
+            "%d publicacoes unicas encontradas para %s (%d termos)",
+            len(all_results), data_publicacao, len(_TERMOS_COMPRAS),
+        )
+        return all_results
 
     async def buscar_materia(self, url_title: str) -> dict | None:
-        """Busca o conteudo completo de uma materia individual do DOU.
-
-        Args:
-            url_title: Caminho relativo (e.g. ``aviso-de-licitacao-123456``)
-                ou URL completa do artigo.
-
-        Returns:
-            Dict com chaves ``titulo``, ``orgao``, ``conteudo_completo``,
-            ``data_publicacao``, ``secao``, ``tipo_ato`` -- ou ``None`` se
-            a pagina nao puder ser acessada/parseada.
-        """
+        """Busca o conteudo completo de uma materia individual do DOU."""
         url = self._resolve_article_url(url_title)
 
-        # Try Playwright first for individual articles too
-        if _PLAYWRIGHT_AVAILABLE:
-            try:
-                result = await self._buscar_materia_playwright(url)
-                if result:
-                    return result
-                logger.debug(
-                    "Playwright nao extraiu conteudo de %s; tentando HTTP", url
-                )
-            except Exception:
-                logger.debug(
-                    "Playwright falhou para materia %s; tentando HTTP",
-                    url,
-                    exc_info=True,
-                )
-
-        # HTTP fallback
         try:
-            return await self._buscar_materia_http(url)
+            async with httpx.AsyncClient(
+                timeout=self._timeout,
+                follow_redirects=True,
+                headers=_HTTP_HEADERS,
+                verify=False,
+            ) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            return self._parse_article_html(response.text, url)
         except Exception:
             logger.exception("Erro ao buscar materia %s", url)
             return None
 
     # ------------------------------------------------------------------
-    # Strategy 1: Playwright
+    # HTTP search
     # ------------------------------------------------------------------
 
-    async def _buscar_playwright_paginado(
-        self, date_dou: str, termo: str | None
-    ) -> list[dict]:
-        """Use Playwright to fetch all pages of DOU search results.
-
-        Opens the first page, extracts articles, then clicks "Next" to
-        navigate through all pages within the same browser session.
-        """
-        from playwright.async_api import async_playwright
-
-        all_results: list[dict] = []
-        url = self._build_search_url(date_dou, termo)
-
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            try:
-                context = await browser.new_context(
-                    user_agent=_USER_AGENT,
-                    locale="pt-BR",
-                    viewport={"width": 1280, "height": 720},
-                )
-                pw_page = await context.new_page()
-                await pw_page.goto(
-                    url, wait_until="domcontentloaded",
-                    timeout=self.playwright_timeout_ms,
-                )
-                await pw_page.wait_for_load_state(
-                    "networkidle", timeout=self.playwright_timeout_ms,
-                )
-
-                page_num = 1
-                while page_num <= _MAX_PAGES:
-                    articles = await self._extrair_portlet(pw_page)
-                    if not articles:
-                        break
-
-                    all_results.extend(articles)
-                    logger.debug(
-                        "Pagina %d: %d artigos (acumulado: %d)",
-                        page_num,
-                        len(articles),
-                        len(all_results),
-                    )
-
-                    if len(articles) < _RESULTS_PER_PAGE:
-                        break
-
-                    next_btn = pw_page.locator(
-                        '.page-link:has-text("Next")'
-                    )
-                    if await next_btn.count() == 0:
-                        break
-
-                    await next_btn.click()
-                    await pw_page.wait_for_load_state(
-                        "networkidle", timeout=self.playwright_timeout_ms,
-                    )
-                    page_num += 1
-            finally:
-                await browser.close()
-
-        return all_results
-
-    async def _extrair_portlet(self, page) -> list[dict]:
-        """Extract articles from the portlet element on the current page."""
-        portlet_el = page.locator(_PORTLET_ELEMENT_ID)
-
-        try:
-            await page.wait_for_function(
-                f"""() => {{
-                    const el = document.querySelector('{_PORTLET_ELEMENT_ID}');
-                    return el && el.innerHTML.trim().length > 10;
-                }}""",
-                timeout=self.playwright_timeout_ms,
+    async def _buscar_termo(self, date_dou: str, termo: str) -> list[dict]:
+        """Single-term search with a fresh client."""
+        async with httpx.AsyncClient(
+            timeout=self._timeout,
+            follow_redirects=True,
+            headers=_HTTP_HEADERS,
+            verify=False,
+        ) as client:
+            return await self._buscar_termo_com_client(
+                client, date_dou, termo
             )
-            inner_html = await portlet_el.inner_html()
-        except Exception:
-            inner_html = await portlet_el.inner_html()
 
-        if not inner_html or not inner_html.strip():
-            return []
-
-        return self._parse_portlet_json(inner_html)
-
-    async def _buscar_materia_playwright(self, url: str) -> dict | None:
-        """Use Playwright to fetch and parse an individual DOU article."""
-        from playwright.async_api import async_playwright
-
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch(headless=True)
-            try:
-                context = await browser.new_context(
-                    user_agent=_USER_AGENT,
-                    locale="pt-BR",
-                )
-                page = await context.new_page()
-                await page.goto(url, wait_until="domcontentloaded",
-                                timeout=self.playwright_timeout_ms)
-
-                # Wait a moment for JS rendering
-                await page.wait_for_load_state("networkidle",
-                                               timeout=self.playwright_timeout_ms)
-
-                page_html = await page.content()
-                return self._parse_article_html(page_html, url)
-            finally:
-                await browser.close()
-
-    # ------------------------------------------------------------------
-    # Strategy 2: HTTP scraping (fallback)
-    # ------------------------------------------------------------------
-
-    async def _buscar_http(
-        self, date_dou: str, termo: str | None
+    async def _buscar_termo_com_client(
+        self,
+        client: httpx.AsyncClient,
+        date_dou: str,
+        termo: str,
     ) -> list[dict]:
-        """Fallback: try plain HTTP GET and parse whatever JSON the server
-        includes in the initial HTML response."""
+        """Fetch one search term using an existing client."""
         url = self._build_search_url(date_dou, termo)
-        logger.debug("HTTP fallback: GET %s", url)
-
-        async with httpx.AsyncClient(
-            timeout=self._http_timeout,
-            follow_redirects=True,
-            headers=_HTTP_HEADERS,
-        ) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-
-        return self._parse_results_html(response.text)
-
-    async def _buscar_materia_http(self, url: str) -> dict | None:
-        """Fetch an individual DOU article page via plain HTTP."""
-        logger.debug("HTTP: GET %s", url)
-
-        async with httpx.AsyncClient(
-            timeout=self._http_timeout,
-            follow_redirects=True,
-            headers=_HTTP_HEADERS,
-        ) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-
-        return self._parse_article_html(response.text, url)
+        response = await client.get(url)
+        response.raise_for_status()
+        return self._extract_articles_from_html(response.text)
 
     # ------------------------------------------------------------------
-    # Parsing helpers
+    # HTML parsing
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _parse_portlet_json(raw: str) -> list[dict]:
-        """Parse the JSON blob from the Liferay portlet element.
-
-        The element innerHTML is a JSON object with a ``jsonArray`` key
-        whose value is a JSON-encoded string of an array of articles.
-        """
-        try:
-            # The raw content may be HTML-entity-encoded JSON
-            decoded = html.unescape(raw).strip()
-            data = json.loads(decoded)
-        except json.JSONDecodeError:
-            # Sometimes the element contains the JSON as a value attribute
-            # inside a nested tag.
-            value_match = re.search(
-                r'value=["\']({.*?})["\']', raw, re.DOTALL
-            )
-            if not value_match:
-                logger.warning(
-                    "Nao foi possivel parsear JSON do portlet: %.200s", raw
-                )
-                return []
-            try:
-                data = json.loads(html.unescape(value_match.group(1)))
-            except json.JSONDecodeError:
-                logger.warning("Fallback de parse do portlet tambem falhou")
-                return []
-
-        # Extract jsonArray
-        json_array_raw = data.get("jsonArray")
-        if not json_array_raw:
-            logger.debug("Chave 'jsonArray' ausente ou vazia no portlet data")
+    def _extract_articles_from_html(page_html: str) -> list[dict]:
+        """Extract the article list from the portlet JSON in the HTML."""
+        match = _PORTLET_RE.search(page_html)
+        if not match:
             return []
 
-        if isinstance(json_array_raw, list):
-            return json_array_raw
+        raw = match.group(1).strip()
+        if not raw:
+            return []
 
-        if isinstance(json_array_raw, str):
+        try:
+            decoded = html_mod.unescape(raw)
+            data = json.loads(decoded)
+        except (json.JSONDecodeError, ValueError):
+            logger.debug("Falha ao parsear portlet JSON")
+            return []
+
+        json_array = data.get("jsonArray")
+        if not json_array:
+            return []
+
+        if isinstance(json_array, list):
+            return json_array
+
+        if isinstance(json_array, str):
             try:
-                articles = json.loads(json_array_raw)
-                if isinstance(articles, list):
-                    return articles
+                parsed = json.loads(json_array)
+                return parsed if isinstance(parsed, list) else []
             except json.JSONDecodeError:
-                logger.warning("Falha ao parsear jsonArray string")
+                return []
 
         return []
 
     @staticmethod
-    def _parse_results_html(page_html: str) -> list[dict]:
-        """Extract search results from raw HTML (HTTP fallback).
-
-        Tries multiple patterns since the DOU portal may embed the data
-        differently across page versions.
-        """
-        results: list[dict] = []
-
-        # Pattern 1: var params = {...}; with jsonArray inside
-        json_pattern = re.compile(
-            r"var\s+params\s*=\s*(\{.*?\});", re.DOTALL
-        )
-        match = json_pattern.search(page_html)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                json_array = data.get("jsonArray")
-                if json_array:
-                    parsed = (
-                        json.loads(json_array)
-                        if isinstance(json_array, str)
-                        else json_array
-                    )
-                    if isinstance(parsed, list) and parsed:
-                        return parsed
-            except (json.JSONDecodeError, KeyError):
-                logger.debug("Pattern 1 (var params) falhou")
-
-        # Pattern 2: "jsonArray" : "[...]" -- Liferay-style
-        json_array_pattern = re.compile(
-            r'"jsonArray"\s*:\s*"(\[.*?\])"', re.DOTALL
-        )
-        match = json_array_pattern.search(page_html)
-        if match:
-            try:
-                json_str = (
-                    match.group(1).replace('\\"', '"').replace("\\/", "/")
-                )
-                parsed = json.loads(json_str)
-                if isinstance(parsed, list) and parsed:
-                    return parsed
-            except json.JSONDecodeError:
-                logger.debug("Pattern 2 (jsonArray inline) falhou")
-
-        # Pattern 3: portlet element with id containing JSON
-        portlet_pattern = re.compile(
-            r'id=["\']_br_com_seatecnologia_in_buscadou_BuscaDouPortlet_params["\'][^>]*>'
-            r"(.*?)</",
-            re.DOTALL,
-        )
-        match = portlet_pattern.search(page_html)
-        if match:
-            inner = html.unescape(match.group(1)).strip()
-            if inner:
-                try:
-                    data = json.loads(inner)
-                    json_array = data.get("jsonArray")
-                    if json_array:
-                        parsed = (
-                            json.loads(json_array)
-                            if isinstance(json_array, str)
-                            else json_array
-                        )
-                        if isinstance(parsed, list) and parsed:
-                            return parsed
-                except json.JSONDecodeError:
-                    logger.debug("Pattern 3 (portlet element) falhou")
-
-        # Pattern 4: search-result divs (very basic extraction)
-        result_pattern = re.compile(
-            r'<div[^>]*class="[^"]*resultado-busca-dou[^"]*"[^>]*>(.*?)</div>',
-            re.DOTALL,
-        )
-        for block in result_pattern.finditer(page_html):
-            entry: dict = {}
-            title_match = re.search(
-                r'<a[^>]*href="([^"]*)"[^>]*>\s*(.*?)\s*</a>',
-                block.group(1),
-                re.DOTALL,
-            )
-            if title_match:
-                entry["urlTitle"] = title_match.group(1)
-                entry["title"] = re.sub(
-                    r"<[^>]+>", "", title_match.group(2)
-                ).strip()
-            date_match = re.search(
-                r'<span[^>]*class="[^"]*date[^"]*"[^>]*>(.*?)</span>',
-                block.group(1),
-                re.DOTALL,
-            )
-            if date_match:
-                entry["pubDate"] = date_match.group(1).strip()
-            if entry:
-                results.append(entry)
-
-        return results
-
-    @staticmethod
     def _parse_article_html(page_html: str, source_url: str) -> dict | None:
-        """Parse an individual DOU article page into a structured dict."""
+        """Parse an individual DOU article page."""
         if not page_html:
             return None
 
@@ -538,7 +270,6 @@ class DOUClient:
             "url": source_url,
         }
 
-        # Title: <p class="identifica">...</p> or <h3 class="titulo-dou">
         for pattern in [
             re.compile(
                 r'<p[^>]*class="[^"]*identifica[^"]*"[^>]*>(.*?)</p>',
@@ -550,13 +281,12 @@ class DOUClient:
             ),
             re.compile(r"<title>(.*?)</title>", re.DOTALL),
         ]:
-            match = pattern.search(page_html)
-            if match:
-                result["titulo"] = _strip_html(match.group(1)).strip()
+            m = pattern.search(page_html)
+            if m:
+                result["titulo"] = _strip_html(m.group(1)).strip()
                 if result["titulo"]:
                     break
 
-        # Orgao: <span class="orgao-dou-data">...</span>
         for pattern in [
             re.compile(
                 r'<span[^>]*class="[^"]*orgao-dou-data[^"]*"[^>]*>(.*?)</span>',
@@ -567,13 +297,12 @@ class DOUClient:
                 re.DOTALL,
             ),
         ]:
-            match = pattern.search(page_html)
-            if match:
-                result["orgao"] = _strip_html(match.group(1)).strip()
+            m = pattern.search(page_html)
+            if m:
+                result["orgao"] = _strip_html(m.group(1)).strip()
                 if result["orgao"]:
                     break
 
-        # Full content: <div class="texto-dou"> or <div class="dou-paragraph">
         for pattern in [
             re.compile(
                 r'<div[^>]*class="[^"]*texto-dou[^"]*"[^>]*>(.*?)</div>',
@@ -584,29 +313,24 @@ class DOUClient:
                 re.DOTALL,
             ),
         ]:
-            match = pattern.search(page_html)
-            if match:
-                result["conteudo_completo"] = _strip_html(
-                    match.group(1)
-                ).strip()
+            m = pattern.search(page_html)
+            if m:
+                result["conteudo_completo"] = _strip_html(m.group(1)).strip()
                 if result["conteudo_completo"]:
                     break
 
-        # Publication date: <span class="publicado-dou-data">...</span>
         date_match = re.search(
             r'<span[^>]*class="[^"]*publicado-dou-data[^"]*"[^>]*>(.*?)</span>',
-            page_html,
-            re.DOTALL,
+            page_html, re.DOTALL,
         )
         if date_match:
-            raw_date = _strip_html(date_match.group(1)).strip()
-            result["data_publicacao"] = _parse_date_br(raw_date)
+            result["data_publicacao"] = _parse_date_br(
+                _strip_html(date_match.group(1)).strip()
+            )
 
-        # Article type: <span class="detalhes-dou">...</span> or from title
         type_match = re.search(
             r'<span[^>]*class="[^"]*detalhes-dou[^"]*"[^>]*>(.*?)</span>',
-            page_html,
-            re.DOTALL,
+            page_html, re.DOTALL,
         )
         if type_match:
             result["tipo_ato"] = _strip_html(type_match.group(1)).strip()
@@ -614,11 +338,8 @@ class DOUClient:
         if not result["tipo_ato"] and result["titulo"]:
             result["tipo_ato"] = _infer_tipo_ato(result["titulo"])
 
-        # Only return if we got at least a title or content
         if result["titulo"] or result["conteudo_completo"]:
             return result
-
-        logger.debug("Nenhum conteudo extraido de %s", source_url)
         return None
 
     # ------------------------------------------------------------------
@@ -630,38 +351,27 @@ class DOUClient:
         """Convert ``YYYY-MM-DD`` to ``DD-MM-YYYY`` for the DOU portal."""
         parts = iso_date.split("-")
         if len(parts) != 3:
-            raise ValueError(
-                f"Data invalida (esperado YYYY-MM-DD): {iso_date}"
-            )
+            raise ValueError(f"Data invalida (esperado YYYY-MM-DD): {iso_date}")
         return f"{parts[2]}-{parts[1]}-{parts[0]}"
 
-    def _build_search_url(
-        self, date_dou: str, termo: str | None, *, page: int = 1
-    ) -> str:
-        """Build the full DOU search URL with query parameters."""
-        q = termo if termo else "*"
-        from urllib.parse import quote
-
-        params = (
-            f"q={quote(q)}"
+    def _build_search_url(self, date_dou: str, termo: str) -> str:
+        """Build the full DOU search URL."""
+        return (
+            f"{self.search_url}"
+            f"?q={quote(termo)}"
             f"&s=do3"
             f"&exactDate=personalizado"
             f"&publishFrom={date_dou}"
             f"&publishTo={date_dou}"
             f"&delta={_RESULTS_PER_PAGE}"
         )
-        if page > 1:
-            params += f"&currentPage={page}"
-        return f"{self.search_url}?{params}"
 
     @staticmethod
     def _resolve_article_url(url_title: str) -> str:
         """Resolve an article URL-title to a full URL."""
         if url_title.startswith("http"):
             return url_title
-        # Remove leading slash if present
         slug = url_title.lstrip("/")
-        # If it already contains the path prefix, use base domain
         if slug.startswith("web/dou/"):
             return f"{_DOU_BASE}/{slug}"
         return f"{_DOU_ARTICLE_BASE}{slug}"
@@ -676,26 +386,19 @@ _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 def _strip_html(text: str) -> str:
     """Remove HTML tags and decode entities."""
-    return html.unescape(_HTML_TAG_RE.sub("", text))
+    return html_mod.unescape(_HTML_TAG_RE.sub("", text))
 
 
 def _parse_date_br(raw: str) -> str | None:
-    """Try to parse a Brazilian date string to ISO format.
-
-    Handles formats like ``01/03/2025`` or ``01 de marco de 2025``.
-    Returns ``YYYY-MM-DD`` or ``None``.
-    """
+    """Parse a Brazilian date string to ISO format."""
     if not raw:
         return None
-    # DD/MM/YYYY
     m = re.match(r"(\d{1,2})/(\d{1,2})/(\d{4})", raw)
     if m:
         return f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"
-    # DD-MM-YYYY
     m = re.match(r"(\d{1,2})-(\d{1,2})-(\d{4})", raw)
     if m:
         return f"{m.group(3)}-{m.group(2).zfill(2)}-{m.group(1).zfill(2)}"
-    # Try parsing with datetime
     for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%d de %B de %Y"):
         try:
             dt = datetime.strptime(raw.strip(), fmt)
