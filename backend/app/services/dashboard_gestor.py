@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select, func, case, and_, extract, literal_column
+from sqlalchemy import select, func, case, and_, or_, extract, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Contratacao, Item, Contrato
@@ -37,9 +37,10 @@ async def montar_dashboard(
     Indicadores:
     1. Total de contratacoes no periodo
     2. Soma do valor estimado
-    3. Percentual de contratos firmados com MPEs
+    3. Percentual de contratacoes com beneficio MPE (exclusiva_mpe ou cota_reservada)
     4. Score de conformidade (baseado na meta de 25% MPE)
     5. Top categorias por grupo CATMAT
+    6. Total de contratacoes via SRP
     """
     if periodo_fim is None:
         periodo_fim = date.today()
@@ -71,6 +72,20 @@ async def montar_dashboard(
     # 5 -- Top categorias
     categorias = await _top_categorias(db, orgao_cnpj, periodo_inicio, periodo_fim, limite=10)
 
+    # 6 -- Total de contratacoes via SRP
+    stmt_srp = select(
+        func.count(Contratacao.id).label("total_srp"),
+    ).where(
+        and_(
+            Contratacao.orgao_cnpj == orgao_cnpj,
+            Contratacao.data_publicacao >= periodo_inicio,
+            Contratacao.data_publicacao <= periodo_fim,
+            Contratacao.srp == True,  # noqa: E712
+        )
+    )
+    srp_result = (await db.execute(stmt_srp)).one()
+    total_srp: int = srp_result.total_srp
+
     return {
         "orgao_cnpj": orgao_cnpj,
         "periodo": {
@@ -86,6 +101,7 @@ async def montar_dashboard(
         },
         "conformidade": conformidade,
         "top_categorias": categorias,
+        "total_srp": total_srp,
     }
 
 
@@ -256,22 +272,30 @@ async def _calcular_pct_mpe(
     periodo_inicio: date,
     periodo_fim: date,
 ) -> float:
-    """Calcula o percentual de contratos com fornecedores MPE."""
+    """Calcula o percentual de contratacoes com beneficio MPE (LC 123/2006).
+
+    Uma contratacao conta como beneficio MPE se ``exclusiva_mpe`` for True
+    **ou** ``cota_reservada`` for True.
+    """
     stmt = select(
-        func.count(Contrato.id).label("total"),
+        func.count(Contratacao.id).label("total"),
         func.count(
             case(
-                (Contrato.fornecedor_porte.in_(_PORTES_MPE), Contrato.id),
+                (
+                    or_(
+                        Contratacao.exclusiva_mpe == True,   # noqa: E712
+                        Contratacao.cota_reservada == True,   # noqa: E712
+                    ),
+                    Contratacao.id,
+                ),
                 else_=None,
             )
         ).label("total_mpe"),
-    ).join(
-        Contratacao, Contrato.contratacao_id == Contratacao.id
     ).where(
         and_(
             Contratacao.orgao_cnpj == orgao_cnpj,
-            Contrato.data_assinatura >= periodo_inicio,
-            Contrato.data_assinatura <= periodo_fim,
+            Contratacao.data_publicacao >= periodo_inicio,
+            Contratacao.data_publicacao <= periodo_fim,
         )
     )
 

@@ -56,6 +56,10 @@ async def montar_dashboard(
                 Contratacao.data_encerramento_proposta >= hoje,
                 Contratacao.data_encerramento_proposta.is_(None),
             ),
+            or_(
+                Contratacao.situacao.in_(["aberta", "futura"]),
+                Contratacao.situacao.is_(None),
+            ),
         )
     )
     abertas = (await db.execute(stmt_abertas)).one()
@@ -140,10 +144,14 @@ async def radar_oportunidades(
             Contratacao.orgao_nome,
             Contratacao.objeto,
             Contratacao.valor_estimado,
-            Contratacao.exclusiva_mpe,
+            Contratacao.beneficio_mpe,
+            Contratacao.srp,
+            Contratacao.tipo_instrumento,
+            Contratacao.link_sistema_origem,
             Contratacao.data_encerramento_proposta,
             Contratacao.modalidade_nome,
             Contratacao.municipio_ibge,
+            Contratacao.situacao,
             cruzamento_sub.c.sinal,
             cruzamento_sub.c.score,
             cruzamento_sub.c.cnae_divisao,
@@ -160,6 +168,10 @@ async def radar_oportunidades(
                 or_(
                     Contratacao.data_encerramento_proposta >= hoje,
                     Contratacao.data_encerramento_proposta.is_(None),
+                ),
+                or_(
+                    Contratacao.situacao.in_(["aberta", "futura"]),
+                    Contratacao.situacao.is_(None),
                 ),
             )
         )
@@ -179,7 +191,11 @@ async def radar_oportunidades(
             "orgao": row.orgao_nome,
             "objeto": row.objeto,
             "valor_estimado": float(row.valor_estimado) if row.valor_estimado else None,
-            "exclusiva_mpe": bool(row.exclusiva_mpe),
+            "beneficio_mpe": row.beneficio_mpe,
+            "srp": bool(row.srp) if row.srp is not None else None,
+            "tipo_instrumento": row.tipo_instrumento,
+            "link_sistema_origem": row.link_sistema_origem,
+            "situacao": row.situacao,
             "data_encerramento": row.data_encerramento_proposta.isoformat() if row.data_encerramento_proposta else None,
             "modalidade": row.modalidade_nome,
             "municipio_ibge": row.municipio_ibge,
@@ -347,14 +363,14 @@ async def _pct_mpe_uf(
     db: AsyncSession,
     uf: str,
 ) -> float:
-    """Calcula o percentual de contratacoes exclusivas MPE na UF nos ultimos 12 meses."""
+    """Calcula o percentual de contratacoes com beneficio MPE na UF nos ultimos 12 meses."""
     data_inicio = date.today() - timedelta(days=365)
 
     stmt = select(
         func.count(Contratacao.id).label("total"),
         func.count(
             case(
-                (Contratacao.exclusiva_mpe == True, Contratacao.id),
+                (Contratacao.beneficio_mpe.is_not(None), Contratacao.id),
                 else_=None,
             )
         ).label("total_mpe"),

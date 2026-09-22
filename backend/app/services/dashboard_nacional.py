@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select, func, case, and_, extract, distinct
+from sqlalchemy import select, func, case, and_, or_, extract, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Contratacao, Contrato, Cruzamento, Item
@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 # Portes considerados MPE
 _PORTES_MPE = ("MEI", "ME", "EPP")
+
+# Situacoes consideradas como oportunidades abertas
+_SITUACOES_ABERTAS = ("aberta", "futura")
 
 # Lista de UFs brasileiras para garantir cobertura no mapa
 _UFS_BRASIL = [
@@ -39,19 +42,27 @@ async def montar_dashboard(
 
     1. Total de contratacoes em todas as esferas
     2. Valor total
-    3. Participacao nacional de MPEs (%)
-    4. Contagem de desertos de fornecimento
-    5. Detalhamento por UF
+    3. Total de contratacoes via SRP (Sistema de Registro de Precos)
+    4. Participacao nacional de MPEs (%) -- exclusiva_mpe + cota_reservada
+    5. Oportunidades abertas (baseado em situacao)
+    6. Contagem de desertos de fornecimento
+    7. Detalhamento por UF
     """
     if periodo_fim is None:
         periodo_fim = date.today()
     if periodo_inicio is None:
         periodo_inicio = periodo_fim - timedelta(days=365)
 
-    # 1 & 2 -- Totais nacionais
+    # 1 & 2 -- Totais nacionais + SRP
     stmt_totais = select(
         func.count(Contratacao.id).label("total"),
         func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
+        func.count(
+            case(
+                (Contratacao.srp == True, Contratacao.id),  # noqa: E712
+                else_=None,
+            )
+        ).label("total_srp"),
     ).where(
         and_(
             Contratacao.data_publicacao >= periodo_inicio,
@@ -60,7 +71,7 @@ async def montar_dashboard(
     )
     totais = (await db.execute(stmt_totais)).one()
 
-    # 3 -- Participacao nacional de MPEs
+    # 3 -- Participacao nacional de MPEs (exclusiva_mpe + cota_reservada)
     pct_mpe = await _pct_mpe_nacional(db, periodo_inicio, periodo_fim)
 
     # 4 -- Desertos de fornecimento
@@ -69,6 +80,9 @@ async def montar_dashboard(
     # 5 -- Resumo por UF
     resumo_uf = await _resumo_por_uf(db, periodo_inicio, periodo_fim)
 
+    # 6 -- Oportunidades abertas (baseado em situacao, nao apenas datas)
+    oportunidades_abertas = await _contar_oportunidades_abertas(db)
+
     return {
         "periodo": {
             "inicio": periodo_inicio.isoformat(),
@@ -76,7 +90,9 @@ async def montar_dashboard(
         },
         "total_contratacoes": totais.total,
         "valor_total_estimado": float(totais.valor_total),
+        "total_srp": totais.total_srp,
         "participacao_mpe_nacional": pct_mpe,
+        "oportunidades_abertas": oportunidades_abertas,
         "desertos_fornecimento": qtd_desertos,
         "resumo_por_uf": resumo_uf,
     }
@@ -88,8 +104,11 @@ async def dados_mapa(
     """Dados para mapa coropletico: agregacao por UF de contratacoes.
 
     Retorna todas as 27 UFs, mesmo as sem dados (com zeros).
-    Usa tabela Contratacao diretamente (campo exclusiva_mpe) em vez de Contrato.
+    Usa tabela Contratacao diretamente com beneficio MPE (exclusiva_mpe
+    ou cota_reservada) em vez de Contrato.
     """
+    cond_mpe = _beneficio_mpe_condition()
+
     stmt = (
         select(
             Contratacao.uf,
@@ -97,18 +116,24 @@ async def dados_mapa(
             func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
             func.count(
                 case(
-                    (Contratacao.exclusiva_mpe == True, Contratacao.id),
+                    (cond_mpe, Contratacao.id),
                     else_=None,
                 )
             ).label("total_mpe"),
             func.coalesce(
                 func.sum(
                     case(
-                        (Contratacao.exclusiva_mpe == True, Contratacao.valor_estimado),
+                        (cond_mpe, Contratacao.valor_estimado),
                         else_=None,
                     )
                 ), 0
             ).label("valor_mpe"),
+            func.count(
+                case(
+                    (Contratacao.srp == True, Contratacao.id),  # noqa: E712
+                    else_=None,
+                )
+            ).label("total_srp"),
         )
         .where(
             and_(
@@ -136,6 +161,7 @@ async def dados_mapa(
             "contratos_mpe": total_mpe,
             "valor_mpe": float(r.valor_mpe) if r else 0.0,
             "percentual_mpe": pct,
+            "total_srp": r.total_srp if r else 0,
         })
 
     return resultado
@@ -189,11 +215,13 @@ async def tendencias(
     """Tendencias mensais nacionais de contratacoes.
 
     Usa Contratacao.data_publicacao em vez de Contrato.data_assinatura.
+    Beneficio MPE considera exclusiva_mpe e cota_reservada.
     """
     data_inicio = date.today() - timedelta(days=periodo_meses * 30)
 
     col_ano = extract("year", Contratacao.data_publicacao).label("ano")
     col_mes = extract("month", Contratacao.data_publicacao).label("mes")
+    cond_mpe = _beneficio_mpe_condition()
 
     stmt = (
         select(
@@ -203,18 +231,24 @@ async def tendencias(
             func.coalesce(func.sum(Contratacao.valor_estimado), 0).label("valor_total"),
             func.count(
                 case(
-                    (Contratacao.exclusiva_mpe == True, Contratacao.id),
+                    (cond_mpe, Contratacao.id),
                     else_=None,
                 )
             ).label("total_mpe"),
             func.coalesce(
                 func.sum(
                     case(
-                        (Contratacao.exclusiva_mpe == True, Contratacao.valor_estimado),
+                        (cond_mpe, Contratacao.valor_estimado),
                         else_=None,
                     )
                 ), 0
             ).label("valor_mpe"),
+            func.count(
+                case(
+                    (Contratacao.srp == True, Contratacao.id),  # noqa: E712
+                    else_=None,
+                )
+            ).label("total_srp"),
         )
         .where(
             and_(
@@ -244,6 +278,7 @@ async def tendencias(
             "contratos_mpe": total_mpe,
             "valor_mpe": float(row.valor_mpe),
             "percentual_mpe": pct,
+            "total_srp": row.total_srp,
         })
 
     return serie
@@ -253,17 +288,33 @@ async def tendencias(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
+def _beneficio_mpe_condition():
+    """Condicao SQLAlchemy para contratacoes com beneficio MPE.
+
+    Considera tanto exclusiva_mpe quanto cota_reservada como beneficios
+    para micro e pequenas empresas.
+    """
+    return or_(
+        Contratacao.exclusiva_mpe == True,  # noqa: E712
+        Contratacao.cota_reservada == True,  # noqa: E712
+    )
+
+
 async def _pct_mpe_nacional(
     db: AsyncSession,
     periodo_inicio: date,
     periodo_fim: date,
 ) -> float:
-    """Calcula o percentual nacional de contratacoes exclusivas para MPEs."""
+    """Calcula o percentual nacional de contratacoes com beneficio MPE.
+
+    Considera exclusiva_mpe e cota_reservada como beneficios para MPEs.
+    """
     stmt = select(
         func.count(Contratacao.id).label("total"),
         func.count(
             case(
-                (Contratacao.exclusiva_mpe == True, Contratacao.id),
+                (_beneficio_mpe_condition(), Contratacao.id),
                 else_=None,
             )
         ).label("total_mpe"),
@@ -285,6 +336,25 @@ async def _contar_desertos(db: AsyncSession) -> int:
     stmt = select(
         func.count(distinct(func.concat(Cruzamento.cnae_divisao, "-", Cruzamento.uf)))
     ).where(Cruzamento.sinal == SinalOportunidade.DESERTO.value)
+
+    result = await db.execute(stmt)
+    return result.scalar_one() or 0
+
+
+async def _contar_oportunidades_abertas(db: AsyncSession) -> int:
+    """Conta contratacoes com oportunidades abertas.
+
+    Filtra por situacao em ('aberta', 'futura') ou situacao nula,
+    em vez de depender apenas de datas.
+    """
+    stmt = select(
+        func.count(Contratacao.id)
+    ).where(
+        or_(
+            Contratacao.situacao.in_(_SITUACOES_ABERTAS),
+            Contratacao.situacao.is_(None),
+        )
+    )
 
     result = await db.execute(stmt)
     return result.scalar_one() or 0

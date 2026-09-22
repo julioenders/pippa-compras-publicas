@@ -6,3 +6,4 @@ from app.models.alerta import Alerta
 from app.models.pca import PCAItem
 from app.models.catalogo import CatalogoMaterial, CatalogoServico
 from app.models.cache_mpe import CacheMPE
+from app.models.evento import EventoContratacao

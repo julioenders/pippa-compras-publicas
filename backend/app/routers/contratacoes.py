@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models import Contratacao, Item
+from app.models import Contratacao, EventoContratacao, Item
 
 router = APIRouter()
 
@@ -23,6 +23,9 @@ async def listar_contratacoes(
     modalidade: Optional[str] = Query(None, description="Modalidade da contratacao"),
     esfera: Optional[str] = Query(None, description="Esfera: federal, estadual ou municipal"),
     exclusiva_mpe: Optional[bool] = Query(None, description="Filtrar apenas contratacoes exclusivas para MPE"),
+    situacao: Optional[str] = Query(None, description="Situacao da contratacao (ex: Aberto, Encerrado)"),
+    srp: Optional[bool] = Query(None, description="Filtrar contratacoes com Sistema de Registro de Precos"),
+    beneficio_mpe: Optional[str] = Query(None, description="Tipo de beneficio MPE (ex: exclusiva, cota_reservada)"),
     pagina: int = Query(1, ge=1, description="Numero da pagina"),
     tamanho: int = Query(20, ge=1, le=100, description="Quantidade de itens por pagina"),
     db: AsyncSession = Depends(get_db),
@@ -42,6 +45,12 @@ async def listar_contratacoes(
         filtros.append(Contratacao.esfera == esfera[0].upper())
     if exclusiva_mpe is not None:
         filtros.append(Contratacao.exclusiva_mpe == exclusiva_mpe)
+    if situacao:
+        filtros.append(Contratacao.situacao.ilike(f"%{situacao}%"))
+    if srp is not None:
+        filtros.append(Contratacao.srp == srp)
+    if beneficio_mpe:
+        filtros.append(Contratacao.beneficio_mpe.ilike(f"%{beneficio_mpe}%"))
 
     where = and_(*filtros) if filtros else True
 
@@ -77,6 +86,13 @@ async def listar_contratacoes(
                 "municipio_ibge": c.municipio_ibge,
                 "exclusiva_mpe": c.exclusiva_mpe,
                 "esfera": c.esfera,
+                "situacao": c.situacao,
+                "situacao_descricao": c.situacao_descricao,
+                "beneficio_mpe": c.beneficio_mpe,
+                "srp": c.srp,
+                "tipo_instrumento": c.tipo_instrumento,
+                "criterio_julgamento": c.criterio_julgamento,
+                "modo_disputa": c.modo_disputa,
             }
             for c in rows
         ],
@@ -90,7 +106,7 @@ async def detalhe_contratacao(
 ):
     stmt = (
         select(Contratacao)
-        .options(selectinload(Contratacao.items))
+        .options(selectinload(Contratacao.items), selectinload(Contratacao.eventos))
         .where(Contratacao.id == id)
     )
     result = await db.execute(stmt)
@@ -114,7 +130,15 @@ async def detalhe_contratacao(
         "municipio_ibge": c.municipio_ibge,
         "exclusiva_mpe": c.exclusiva_mpe,
         "esfera": c.esfera,
-        "status": c.status,
+        "situacao": c.situacao,
+        "situacao_descricao": c.situacao_descricao,
+        "beneficio_mpe": c.beneficio_mpe,
+        "srp": c.srp,
+        "tipo_instrumento": c.tipo_instrumento,
+        "criterio_julgamento": c.criterio_julgamento,
+        "modo_disputa": c.modo_disputa,
+        "link_sistema_origem": c.link_sistema_origem,
+        "link_edital": c.link_edital,
         "itens": [
             {
                 "numero": it.numero_item,
@@ -125,6 +149,15 @@ async def detalhe_contratacao(
                 "catmat": it.catmat_catser,
             }
             for it in c.items
+        ],
+        "eventos": [
+            {
+                "id": ev.id,
+                "tipo": ev.tipo,
+                "data_evento": ev.data_evento.isoformat() if ev.data_evento else None,
+                "descricao": ev.descricao,
+            }
+            for ev in c.eventos
         ],
         "fonte": "PNCP",
     }
