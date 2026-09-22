@@ -98,8 +98,10 @@ _HTTP_HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-_PLAYWRIGHT_TIMEOUT_MS = 45_000  # 45 seconds for page + element wait
+_PLAYWRIGHT_TIMEOUT_MS = 60_000  # 60 seconds for page + element wait
 _HTTP_TIMEOUT = 30.0
+_RESULTS_PER_PAGE = 75
+_MAX_PAGES = 30  # safety cap: 75 * 30 = 2250 articles max
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +130,7 @@ class DOUClient:
         data_publicacao: str,
         termo: str | None = None,
     ) -> list[dict]:
-        """Busca publicacoes na Secao 3 do DOU.
+        """Busca publicacoes na Secao 3 do DOU com paginacao automatica.
 
         Args:
             data_publicacao: Data no formato ``YYYY-MM-DD``.
@@ -141,10 +143,12 @@ class DOUClient:
         """
         date_dou = self._format_date_for_dou(data_publicacao)
 
-        # Strategy 1 -- Playwright
+        # Strategy 1 -- Playwright (with pagination)
         if _PLAYWRIGHT_AVAILABLE:
             try:
-                results = await self._buscar_playwright(date_dou, termo)
+                results = await self._buscar_playwright_paginado(
+                    date_dou, termo
+                )
                 if results:
                     logger.info(
                         "Playwright: %d publicacoes encontradas para %s",
@@ -169,7 +173,7 @@ class DOUClient:
                 data_publicacao,
             )
 
-        # Strategy 2 -- HTTP fallback
+        # Strategy 2 -- HTTP fallback (single page only)
         try:
             results = await self._buscar_http(date_dou, termo)
             logger.info(
@@ -225,14 +229,18 @@ class DOUClient:
     # Strategy 1: Playwright
     # ------------------------------------------------------------------
 
-    async def _buscar_playwright(
+    async def _buscar_playwright_paginado(
         self, date_dou: str, termo: str | None
     ) -> list[dict]:
-        """Use Playwright to render the DOU search page and extract results."""
+        """Use Playwright to fetch all pages of DOU search results.
+
+        Opens the first page, extracts articles, then clicks "Next" to
+        navigate through all pages within the same browser session.
+        """
         from playwright.async_api import async_playwright
 
+        all_results: list[dict] = []
         url = self._build_search_url(date_dou, termo)
-        logger.debug("Playwright: navegando para %s", url)
 
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=True)
@@ -242,42 +250,68 @@ class DOUClient:
                     locale="pt-BR",
                     viewport={"width": 1280, "height": 720},
                 )
-                page = await context.new_page()
-
-                await page.goto(url, wait_until="domcontentloaded",
-                                timeout=self.playwright_timeout_ms)
-
-                # Wait for the portlet element to be populated with JSON data.
-                # The element exists in the initial HTML but its innerHTML is
-                # empty until JavaScript fills it.
-                portlet_el = page.locator(_PORTLET_ELEMENT_ID)
-                await portlet_el.wait_for(
-                    state="attached", timeout=self.playwright_timeout_ms
+                pw_page = await context.new_page()
+                await pw_page.goto(
+                    url, wait_until="domcontentloaded",
+                    timeout=self.playwright_timeout_ms,
+                )
+                await pw_page.wait_for_load_state(
+                    "networkidle", timeout=self.playwright_timeout_ms,
                 )
 
-                # Poll until innerHTML is non-empty (JS has populated it).
-                inner_html = ""
-                try:
-                    await page.wait_for_function(
-                        f"""() => {{
-                            const el = document.querySelector('{_PORTLET_ELEMENT_ID}');
-                            return el && el.innerHTML.trim().length > 10;
-                        }}""",
-                        timeout=self.playwright_timeout_ms,
+                page_num = 1
+                while page_num <= _MAX_PAGES:
+                    articles = await self._extrair_portlet(pw_page)
+                    if not articles:
+                        break
+
+                    all_results.extend(articles)
+                    logger.debug(
+                        "Pagina %d: %d artigos (acumulado: %d)",
+                        page_num,
+                        len(articles),
+                        len(all_results),
                     )
-                    inner_html = await portlet_el.inner_html()
-                except Exception:
-                    # Element might exist but never get populated (no results)
-                    inner_html = await portlet_el.inner_html()
 
-                if not inner_html or not inner_html.strip():
-                    logger.debug("Portlet element is empty -- no results")
-                    return []
+                    if len(articles) < _RESULTS_PER_PAGE:
+                        break
 
-                return self._parse_portlet_json(inner_html)
+                    next_btn = pw_page.locator(
+                        '.page-link:has-text("Next")'
+                    )
+                    if await next_btn.count() == 0:
+                        break
 
+                    await next_btn.click()
+                    await pw_page.wait_for_load_state(
+                        "networkidle", timeout=self.playwright_timeout_ms,
+                    )
+                    page_num += 1
             finally:
                 await browser.close()
+
+        return all_results
+
+    async def _extrair_portlet(self, page) -> list[dict]:
+        """Extract articles from the portlet element on the current page."""
+        portlet_el = page.locator(_PORTLET_ELEMENT_ID)
+
+        try:
+            await page.wait_for_function(
+                f"""() => {{
+                    const el = document.querySelector('{_PORTLET_ELEMENT_ID}');
+                    return el && el.innerHTML.trim().length > 10;
+                }}""",
+                timeout=self.playwright_timeout_ms,
+            )
+            inner_html = await portlet_el.inner_html()
+        except Exception:
+            inner_html = await portlet_el.inner_html()
+
+        if not inner_html or not inner_html.strip():
+            return []
+
+        return self._parse_portlet_json(inner_html)
 
     async def _buscar_materia_playwright(self, url: str) -> dict | None:
         """Use Playwright to fetch and parse an individual DOU article."""
@@ -601,18 +635,23 @@ class DOUClient:
             )
         return f"{parts[2]}-{parts[1]}-{parts[0]}"
 
-    def _build_search_url(self, date_dou: str, termo: str | None) -> str:
+    def _build_search_url(
+        self, date_dou: str, termo: str | None, *, page: int = 1
+    ) -> str:
         """Build the full DOU search URL with query parameters."""
+        q = termo if termo else "*"
+        from urllib.parse import quote
+
         params = (
-            f"s=do3"
+            f"q={quote(q)}"
+            f"&s=do3"
             f"&exactDate=personalizado"
             f"&publishFrom={date_dou}"
             f"&publishTo={date_dou}"
+            f"&delta={_RESULTS_PER_PAGE}"
         )
-        if termo:
-            from urllib.parse import quote
-
-            params += f"&q={quote(termo)}"
+        if page > 1:
+            params += f"&currentPage={page}"
         return f"{self.search_url}?{params}"
 
     @staticmethod
