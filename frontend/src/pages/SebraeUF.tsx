@@ -173,7 +173,7 @@ export default function SebraeUF() {
       {radar.length === 0 && cruzamento.length === 0 && (
         <div className="rounded-xl border border-white/5 bg-obs-bg p-8 text-center text-gray-500">
           Nenhuma oportunidade encontrada para {currentUF} no periodo atual.
-          Os dados sao atualizados diariamente via PNCP.
+          Os dados sao atualizados diariamente via DOU Secao 3.
         </div>
       )}
     </div>

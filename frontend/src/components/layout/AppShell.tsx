@@ -12,7 +12,7 @@ export default function AppShell() {
 
       <footer className="border-t border-white/10 bg-obs-bg-dark py-4">
         <p className="text-center text-xs text-gray-500">
-          Dados: PNCP, DOU, Querido Diario, Observatorio SEBRAE
+          Dados: DOU - Diario Oficial da Uniao, Secao 3
         </p>
       </footer>
     </div>

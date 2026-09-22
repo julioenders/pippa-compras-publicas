@@ -17,11 +17,7 @@ const perfisArray = [
 ]
 
 const fonteDados = [
-  'PNCP',
   'DOU Secao 3',
-  'Querido Diario',
-  'Dados Abertos Compras',
-  'Observatorio SEBRAE',
 ]
 
 export default function Home() {

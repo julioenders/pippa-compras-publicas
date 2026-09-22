@@ -115,10 +115,7 @@ class TipoEvento(str, Enum):
 
 
 class FonteDados(str, Enum):
-    PNCP = "pncp"
     DOU_SECAO3 = "dou_secao3"
-    QUERIDO_DIARIO = "querido_diario"
-    DADOS_ABERTOS = "dados_abertos"
 
 
 class PaginacaoParams(BaseModel):

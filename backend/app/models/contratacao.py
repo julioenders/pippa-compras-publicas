@@ -92,7 +92,7 @@ class Contratacao(Base):
     exigencia_conteudo_nacional: Mapped[Optional[bool]] = mapped_column(default=False)
 
     # --- Fonte dos dados ---
-    fonte: Mapped[Optional[str]] = mapped_column(default="pncp")
+    fonte: Mapped[Optional[str]] = mapped_column(default="dou_secao3")
 
     # --- Resultado (Analitica na matriz) ---
     fornecedor_vencedor_cnpj: Mapped[Optional[str]] = mapped_column(default=None)

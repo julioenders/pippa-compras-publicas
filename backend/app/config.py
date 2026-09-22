@@ -6,13 +6,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./pippa_compras.db"
 
-    PNCP_BASE_URL: str = "https://pncp.gov.br/api/consulta"
-    PNCP_INTEGRATION_URL: str = "https://pncp.gov.br/api/pncp"
-    QUERIDO_DIARIO_URL: str = "https://api.queridodiario.org.br"
-    DADOS_ABERTOS_URL: str = "https://dadosabertos.compras.gov.br"
     DOU_WEB_URL: str = "https://www.in.gov.br/consulta/-/buscar/dou"
-    OBSERVATORIO_BASE_URL: str = "https://apiv2-observatorio.sebrae.com.br/tesseract"
-    OBSERVATORIO_TOKEN: str = ""
 
     CORS_ORIGINS: str = "http://localhost:5173"
     LOG_LEVEL: str = "INFO"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -74,7 +74,7 @@ async def buscar_oportunidades(
     5. Ordena por exclusiva_mpe DESC, score DESC, data_encerramento ASC
     6. Retorna lista formatada com linguagem simplificada
 
-    Caso o banco esteja vazio, faz fallback para a API do PNCP.
+    Caso o banco esteja vazio, retorna lista vazia.
     """
     hoje = date.today()
 
@@ -171,9 +171,9 @@ async def buscar_oportunidades(
         result = await db.execute(stmt)
         rows = result.all()
 
-    # Fallback 2: try PNCP API directly
+    # If no results at all, return empty list
     if not rows:
-        return await _fallback_pncp(cnae, uf, municipio_ibge, limite)
+        return []
 
     oportunidades: list[dict[str, Any]] = []
     for row in rows:
@@ -201,7 +201,7 @@ async def buscar_oportunidades(
             "sinal_descricao": _SINAL_LABEL.get(sinal_valor, sinal_valor),
             "score": float(row.score) if row.score else None,
             "qtd_concorrentes_regiao": row.qtd_mpes_regiao,
-            "fonte": "pncp_db",
+            "fonte": "dou_secao3",
         })
 
     return oportunidades
@@ -411,56 +411,3 @@ def _montar_guia_participacao(contratacao: Contratacao) -> list[dict[str, str]]:
     return guia
 
 
-async def _fallback_pncp(
-    cnae: str,
-    uf: str,
-    municipio_ibge: str | None,
-    limite: int,
-) -> list[dict[str, Any]]:
-    """Fallback: busca diretamente na API do PNCP quando o banco esta vazio."""
-    try:
-        from app.clients.pncp import PNCPClient
-
-        client = PNCPClient()
-        data_fim = (date.today() + timedelta(days=30)).strftime("%Y%m%d")
-        resultado = await client.buscar_contratacoes_abertas(
-            data_fim=data_fim,
-            uf=uf,
-            municipio_ibge=municipio_ibge,
-            tamanho=limite,
-        )
-
-        if not resultado:
-            return []
-
-        # The PNCP API may return a list or a dict with a data key
-        itens_raw = resultado if isinstance(resultado, list) else resultado.get("data", [])
-
-        return [
-            {
-                "id": None,
-                "orgao": item.get("nomeOrgao", "Orgao nao identificado"),
-                "objeto": item.get("objetoCompra", "Sem descricao"),
-                "valor": _formatar_valor(item.get("valorTotalEstimado")),
-                "valor_estimado": item.get("valorTotalEstimado"),
-                "exclusiva_mpe": item.get("srp", False),
-                "prazo": _dias_restantes(
-                    date.fromisoformat(item["dataEncerramentoProposta"])
-                    if item.get("dataEncerramentoProposta")
-                    else None
-                ),
-                "data_encerramento": item.get("dataEncerramentoProposta"),
-                "modalidade": item.get("modalidadeNome"),
-                "uf": uf,
-                "municipio_ibge": municipio_ibge,
-                "sinal": SinalOportunidade.COMPETITIVO.value,
-                "sinal_descricao": _SINAL_LABEL[SinalOportunidade.COMPETITIVO.value],
-                "score": None,
-                "qtd_concorrentes_regiao": None,
-                "fonte": "pncp_api",
-            }
-            for item in itens_raw[:limite]
-        ]
-    except Exception:
-        logger.warning("Fallback PNCP tambem falhou para CNAE=%s UF=%s", cnae, uf, exc_info=True)
-        return []

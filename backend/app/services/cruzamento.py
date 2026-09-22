@@ -1,6 +1,5 @@
 import logging
 
-from app.clients.observatorio import ObservatorioClient
 from app.schemas.common import BeneficioMPE, SinalOportunidade
 
 logger = logging.getLogger(__name__)
@@ -86,22 +85,15 @@ async def cruzar_demanda_oferta(
     municipio_ibge: str | None,
     beneficio_mpe: str,
     valor_estimado: float | None,
-    observatorio: ObservatorioClient,
+    qtd_mpes: int | None = None,
     srp: bool = False,
     criterio_julgamento: str | None = None,
 ) -> dict:
-    """Cruza a demanda de uma contratacao com a oferta de MPEs na regiao."""
-    try:
-        qtd_mpes = await observatorio.contar_mpes(
-            cnae_divisao=cnae_divisao,
-            uf=uf,
-            municipio_ibge=municipio_ibge,
-        )
-    except Exception:
-        logger.warning("Falha ao consultar Observatorio para CNAE %s, UF %s", cnae_divisao, uf)
-        qtd_mpes = -1
+    """Cruza a demanda de uma contratacao com a oferta de MPEs na regiao.
 
-    if qtd_mpes < 0:
+    Se qtd_mpes nao for fornecido, retorna um sinal COMPETITIVO padrao com score 5.0.
+    """
+    if qtd_mpes is None:
         return {
             "cnae_divisao": cnae_divisao,
             "uf": uf,
@@ -109,7 +101,6 @@ async def cruzar_demanda_oferta(
             "qtd_mpes_regiao": None,
             "sinal": SinalOportunidade.COMPETITIVO.value,
             "score": 5.0,
-            "observatorio_indisponivel": True,
         }
 
     sinal = calcular_sinal(qtd_mpes, beneficio_mpe)
@@ -125,5 +116,4 @@ async def cruzar_demanda_oferta(
         "qtd_mpes_regiao": qtd_mpes,
         "sinal": sinal.value,
         "score": round(score, 1),
-        "observatorio_indisponivel": False,
     }

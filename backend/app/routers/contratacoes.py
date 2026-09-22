@@ -159,5 +159,5 @@ async def detalhe_contratacao(
             }
             for ev in c.eventos
         ],
-        "fonte": "PNCP",
+        "fonte": "DOU Secao 3",
     }

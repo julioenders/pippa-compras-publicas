@@ -56,7 +56,7 @@ export default function GestorPublico() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-gray-400 text-lg">Carregando dados reais do PNCP...</div>
+        <div className="animate-pulse text-gray-400 text-lg">Carregando dados do DOU Secao 3...</div>
       </div>
     )
   }
@@ -108,7 +108,7 @@ export default function GestorPublico() {
     .slice(0, 6)
 
   const kpis = [
-    { title: 'Total Contratacoes', value: total.toLocaleString('pt-BR'), trend: 0, subtitle: 'dados reais PNCP', color: '#0080FF' },
+    { title: 'Total Contratacoes', value: total.toLocaleString('pt-BR'), trend: 0, subtitle: 'dados DOU Secao 3', color: '#0080FF' },
     { title: 'Valor Total', value: fmtVal(valorTotal), trend: 0, subtitle: 'valor estimado', color: '#2ecc71' },
     { title: 'Participacao MPE', value: `${pctMPE}%`, trend: 0, subtitle: 'exclusivas para MPE', color: '#f39c12' },
     { title: 'Score Conformidade', value: `${conformidade}%`, trend: 0, subtitle: 'meta: 25% MPE', color: '#40BBFF' },

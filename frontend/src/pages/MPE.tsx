@@ -210,7 +210,7 @@ export default function MPE() {
 
             {loading && (
               <div className="mt-8 text-center">
-                <div className="animate-pulse text-gray-500">Buscando oportunidades reais do PNCP...</div>
+                <div className="animate-pulse text-gray-500">Buscando oportunidades no DOU Secao 3...</div>
                 <div className="mt-2 text-xs text-gray-400">Pode levar ate 50s na primeira vez (API acordando)</div>
               </div>
             )}

@@ -15,25 +15,13 @@ async def health_check():
 
 @router.get("/api/v1/status", tags=["Health"])
 async def api_status():
-    """Retorna o status de todas as conexoes com APIs externas (PNCP, Querido Diario, Observatorio)."""
+    """Retorna o status de todas as conexoes com APIs externas (DOU Secao 3)."""
     now = datetime.now(timezone.utc).isoformat()
     return {
         "apis": [
             {
-                "nome": "PNCP",
-                "url": "https://pncp.gov.br/api",
-                "status": "ok",
-                "last_check": now,
-            },
-            {
-                "nome": "Querido Diário",
-                "url": "https://queridodiario.ok.org.br/api",
-                "status": "ok",
-                "last_check": now,
-            },
-            {
-                "nome": "Observatório Setorial Territorial",
-                "url": "https://observatorio.ucomp.com.br/api",
+                "nome": "DOU Seção 3",
+                "url": "https://www.in.gov.br/consulta/-/buscar/dou",
                 "status": "ok",
                 "last_check": now,
             },
